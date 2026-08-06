@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 
     // ── 1. Create User ────────────────────────────────────────────────────────
     if (action === "create") {
-      const { email, password, fullName, role, isActive } = body;
+      const { email, password, fullName, role, isActive, phone, bankName, bankAccountNumber, bankAccountHolder } = body;
 
       if (!email || !password || !fullName) {
         return NextResponse.json(
@@ -48,18 +48,19 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Gagal membuat user auth" }, { status: 500 });
       }
 
-      // Ensure public.users table is updated with name, role, and is_active
-      const { data: userRecord, error: dbError } = await adminClient
-        .from("users")
-        .upsert({
-          id: createdUser.id,
-          full_name: fullName.trim(),
-          role: role || "employee",
-          is_active: isActive !== undefined ? isActive : true,
-        })
-        .select()
-        .single();
+      // Upsert into public.users with all fields including contact & bank
+      const upsertPayload: Record<string, unknown> = {
+        id: createdUser.id,
+        full_name: fullName.trim(),
+        role: role || "employee",
+        is_active: isActive !== undefined ? isActive : true,
+      };
+      if (phone !== undefined) upsertPayload.phone = phone || null;
+      if (bankName !== undefined) upsertPayload.bank_name = bankName || null;
+      if (bankAccountNumber !== undefined) upsertPayload.bank_account_number = bankAccountNumber || null;
+      if (bankAccountHolder !== undefined) upsertPayload.bank_account_holder = bankAccountHolder || null;
 
+      const { error: dbError } = await adminClient.from("users").upsert(upsertPayload).select().single();
       if (dbError) {
         console.error("DB Upsert error after user create:", dbError.message);
       }
@@ -72,6 +73,10 @@ export async function POST(req: Request) {
           full_name: fullName.trim(),
           role: role || "employee",
           is_active: isActive !== undefined ? isActive : true,
+          phone: phone || null,
+          bank_name: bankName || null,
+          bank_account_number: bankAccountNumber || null,
+          bank_account_holder: bankAccountHolder || null,
           created_at: createdUser.created_at,
         },
       });
@@ -101,20 +106,26 @@ export async function POST(req: Request) {
 
     // ── 3. Update Profile ─────────────────────────────────────────────────────
     if (action === "update") {
-      const { userId, fullName, role, isActive } = body;
+      const { userId, fullName, role, isActive, phone, bankName, bankAccountNumber, bankAccountHolder } = body;
 
       if (!userId || !fullName) {
         return NextResponse.json({ error: "ID User dan nama lengkap wajib diisi." }, { status: 400 });
       }
 
-      // Update public.users
+      // Build update payload dynamically so status-only updates don't wipe contact fields
+      const updatePayload: Record<string, unknown> = {
+        full_name: fullName.trim(),
+        role,
+        is_active: isActive,
+      };
+      if (phone !== undefined) updatePayload.phone = phone || null;
+      if (bankName !== undefined) updatePayload.bank_name = bankName || null;
+      if (bankAccountNumber !== undefined) updatePayload.bank_account_number = bankAccountNumber || null;
+      if (bankAccountHolder !== undefined) updatePayload.bank_account_holder = bankAccountHolder || null;
+
       const { data: dbData, error: dbError } = await adminClient
         .from("users")
-        .update({
-          full_name: fullName.trim(),
-          role,
-          is_active: isActive,
-        })
+        .update(updatePayload)
         .eq("id", userId)
         .select()
         .single();
