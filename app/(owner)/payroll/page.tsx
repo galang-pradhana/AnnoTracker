@@ -275,28 +275,68 @@ export default function PayrollPage() {
       const noteToSave = proofNote.trim() || null;
 
       if (item.dbRecordId) {
-        await supabase.from("payroll_records").update({
+        let updatePayload: Record<string, unknown> = {
           payment_status: "paid",
           paid_at: paidAt,
           proof_url: uploadedUrl,
           proof_note: noteToSave,
-        }).eq("id", item.dbRecordId);
+        };
+
+        let { error: saveErr } = await supabase.from("payroll_records")
+          .update(updatePayload)
+          .eq("id", item.dbRecordId);
+
+        // Fallback without proof columns if column doesn't exist in DB schema yet
+        if (saveErr && (saveErr.code === "PGRST204" || saveErr.message?.includes("proof_"))) {
+          console.warn("Falling back to basic payment status update without proof columns");
+          const { error: fbErr } = await supabase.from("payroll_records")
+            .update({ payment_status: "paid", paid_at: paidAt })
+            .eq("id", item.dbRecordId);
+          saveErr = fbErr;
+        }
+
+        if (saveErr) {
+          console.error("Save payroll record error:", saveErr);
+          setUploadError("Gagal menyimpan ke database: " + saveErr.message);
+          return;
+        }
       } else {
-        const { data } = await supabase.from("payroll_records")
-          .upsert({
-            user_id: empId,
-            period_start: item.period_start,
-            period_end: item.period_end,
-            total_hours: item.total_hours,
-            base_pay: item.base_pay,
-            bonus_pay: item.bonus_pay,
-            total_pay: item.total_pay,
-            payment_status: "paid",
-            paid_at: paidAt,
-            proof_url: uploadedUrl,
-            proof_note: noteToSave,
-          }, { onConflict: "user_id,period_start,period_end" })
+        let upsertPayload: Record<string, unknown> = {
+          user_id: empId,
+          period_start: item.period_start,
+          period_end: item.period_end,
+          total_hours: item.total_hours,
+          base_pay: item.base_pay,
+          bonus_pay: item.bonus_pay,
+          total_pay: item.total_pay,
+          payment_status: "paid",
+          paid_at: paidAt,
+          proof_url: uploadedUrl,
+          proof_note: noteToSave,
+        };
+
+        let { data, error: saveErr } = await supabase.from("payroll_records")
+          .upsert(upsertPayload, { onConflict: "user_id,period_start,period_end" })
           .select().single();
+
+        // Fallback without proof columns if column doesn't exist in DB schema yet
+        if (saveErr && (saveErr.code === "PGRST204" || saveErr.message?.includes("proof_"))) {
+          console.warn("Falling back to basic payment status upsert without proof columns");
+          delete upsertPayload.proof_url;
+          delete upsertPayload.proof_note;
+          const { data: fbData, error: fbErr } = await supabase.from("payroll_records")
+            .upsert(upsertPayload, { onConflict: "user_id,period_start,period_end" })
+            .select().single();
+          data = fbData;
+          saveErr = fbErr;
+        }
+
+        if (saveErr) {
+          console.error("Upsert payroll record error:", saveErr);
+          setUploadError("Gagal menyimpan ke database: " + saveErr.message);
+          return;
+        }
+
         if (data) {
           setPayrollResults(prev => prev.map(r => r.user.id === empId ? { ...r, dbRecordId: data.id } : r));
         }
@@ -306,9 +346,10 @@ export default function PayrollPage() {
         r.user.id === empId ? { ...r, payment_status: "paid", proofUrl: uploadedUrl, proofNote: noteToSave } : r
       ));
       setProofModal(null);
-    } catch (err) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Terjadi kesalahan. Coba lagi.";
       console.error("Payment confirm error:", err);
-      setUploadError("Terjadi kesalahan. Coba lagi.");
+      setUploadError(msg);
     } finally { setIsSaving(null); }
   };
 

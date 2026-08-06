@@ -77,6 +77,8 @@ CREATE TABLE IF NOT EXISTS public.payroll_records (
   total_pay INTEGER NOT NULL DEFAULT 0,
   payment_status TEXT NOT NULL DEFAULT 'unpaid' CHECK (payment_status IN ('unpaid', 'paid')),
   paid_at TIMESTAMPTZ,
+  proof_url TEXT,
+  proof_note TEXT,
   CONSTRAINT unique_user_period UNIQUE (user_id, period_start, period_end)
 );
 
