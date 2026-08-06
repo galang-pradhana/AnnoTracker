@@ -58,24 +58,29 @@ export default function MasterDataPage() {
     setTaskTypes((prev) => prev.map((t) => (t.id === id ? { ...t, name: newName } : t)));
   };
 
-  const handleDeleteTaskType = async (id: string) => {
+  const handleDeleteTaskType = async (id: string, force = false) => {
     const supabase = createClient();
-    // Check if used in task_entries
-    const { count, error: countErr } = await supabase
-      .from("task_entries")
-      .select("id", { count: "exact", head: true })
-      .eq("task_type_id", id);
+    if (!force) {
+      // Check if used in task_entries
+      const { count, error: countErr } = await supabase
+        .from("task_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("task_type_id", id);
 
-    if (countErr) {
-      console.error("Error checking task_entries:", countErr.message);
-    }
+      if (countErr) {
+        console.error("Error checking task_entries:", countErr.message);
+      }
 
-    if ((count || 0) > 0) {
-      return {
-        success: false,
-        hasHistory: true,
-        error: "Jenis Task ini pernah digunakan dalam catatan pengerjaan sesi harian. Gunakan fitur Nonaktifkan untuk mengarsipkannya secara aman.",
-      };
+      if ((count || 0) > 0) {
+        return {
+          success: false,
+          hasHistory: true,
+          error: "Jenis Task ini pernah digunakan dalam catatan pengerjaan sesi harian.",
+        };
+      }
+    } else {
+      // Force delete: clean up references in task_entries first
+      await supabase.from("task_entries").delete().eq("task_type_id", id);
     }
 
     const { error: delErr } = await supabase.from("task_types").delete().eq("id", id);
@@ -110,24 +115,29 @@ export default function MasterDataPage() {
     setClientAccounts((prev) => prev.map((c) => (c.id === id ? { ...c, name: newName } : c)));
   };
 
-  const handleDeleteClientAccount = async (id: string) => {
+  const handleDeleteClientAccount = async (id: string, force = false) => {
     const supabase = createClient();
-    // Check if used in task_entries
-    const { count, error: countErr } = await supabase
-      .from("task_entries")
-      .select("id", { count: "exact", head: true })
-      .eq("client_account_id", id);
+    if (!force) {
+      // Check if used in task_entries
+      const { count, error: countErr } = await supabase
+        .from("task_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("client_account_id", id);
 
-    if (countErr) {
-      console.error("Error checking task_entries:", countErr.message);
-    }
+      if (countErr) {
+        console.error("Error checking task_entries:", countErr.message);
+      }
 
-    if ((count || 0) > 0) {
-      return {
-        success: false,
-        hasHistory: true,
-        error: "Nama Akun Klien ini pernah digunakan dalam catatan pengerjaan sesi harian. Gunakan fitur Nonaktifkan untuk mengarsipkannya secara aman.",
-      };
+      if ((count || 0) > 0) {
+        return {
+          success: false,
+          hasHistory: true,
+          error: "Nama Akun Klien ini pernah digunakan dalam catatan pengerjaan sesi harian.",
+        };
+      }
+    } else {
+      // Force delete: clean up references in task_entries first
+      await supabase.from("task_entries").delete().eq("client_account_id", id);
     }
 
     const { error: delErr } = await supabase.from("client_accounts").delete().eq("id", id);

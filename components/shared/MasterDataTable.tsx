@@ -15,7 +15,7 @@ interface MasterDataTableProps {
   onAddItem: (name: string) => Promise<void>;
   onToggleStatus: (id: string, currentStatus: boolean) => Promise<void>;
   onEditItem?: (id: string, newName: string) => Promise<void>;
-  onDeleteItem?: (id: string) => Promise<{ success: boolean; hasHistory?: boolean; error?: string }>;
+  onDeleteItem?: (id: string, force?: boolean) => Promise<{ success: boolean; hasHistory?: boolean; error?: string }>;
 }
 
 export function MasterDataTable({
@@ -94,12 +94,12 @@ export function MasterDataTable({
     }
   };
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = async (force = false) => {
     if (!deletingItem || !onDeleteItem) return;
     setIsDeletingLoading(true);
     setDeleteWarning(null);
     try {
-      const res = await onDeleteItem(deletingItem.id);
+      const res = await onDeleteItem(deletingItem.id, force);
       if (!res.success) {
         if (res.hasHistory) {
           setDeleteWarning(res.error || "Item ini pernah digunakan dalam data sesi kerja.");
@@ -315,12 +315,15 @@ export function MasterDataTable({
 
             <div className="p-6 space-y-4">
               {deleteWarning ? (
-                <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-700 dark:text-amber-300 text-xs space-y-2">
-                  <p className="font-bold flex items-center gap-1.5">
+                <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-700 dark:text-amber-300 text-xs space-y-3">
+                  <p className="font-bold flex items-center gap-1.5 text-amber-800 dark:text-amber-200">
                     <span>⚠️ Proteksi Riwayat Kerjaan:</span>
                   </p>
                   <p>{deleteWarning}</p>
-                  <div className="pt-2">
+                  <p className="text-[11px] text-[var(--text-secondary)]">
+                    Pilih <strong>Nonaktifkan</strong> untuk mengarsip secara aman, atau <strong>Tetap Hapus Permanen</strong> jika ini data dummy test yang ingin dibersihkan dari database.
+                  </p>
+                  <div className="flex flex-col gap-2 pt-1">
                     <button
                       type="button"
                       onClick={() => {
@@ -330,6 +333,14 @@ export function MasterDataTable({
                       className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
                     >
                       🔒 Nonaktifkan Master Data Ini Saja (Aman)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleConfirmDelete(true)}
+                      disabled={isDeletingLoading}
+                      className="w-full py-2 bg-[var(--danger)] hover:bg-[var(--danger-hover)] text-white font-bold text-xs rounded-xl shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      {isDeletingLoading ? "Menghapus..." : "🔥 Tetap Hapus Permanen Master Data Ini"}
                     </button>
                   </div>
                 </div>
@@ -350,7 +361,7 @@ export function MasterDataTable({
                 {!deleteWarning && (
                   <button
                     type="button"
-                    onClick={handleConfirmDelete}
+                    onClick={() => handleConfirmDelete(false)}
                     disabled={isDeletingLoading}
                     className="flex-1 py-2.5 rounded-xl bg-[var(--danger)] hover:bg-[var(--danger-hover)] text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
                   >
