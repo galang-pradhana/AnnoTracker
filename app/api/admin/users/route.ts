@@ -131,45 +131,47 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, user: dbData });
     }
 
-    // ── 4. Delete User (Smart Delete) ─────────────────────────────────────────
+    // ── 4. Delete User (Smart Delete / Force Delete) ──────────────────────────
     if (action === "delete") {
-      const { userId } = body;
+      const { userId, force } = body;
 
       if (!userId) {
         return NextResponse.json({ error: "ID User wajib diisi." }, { status: 400 });
       }
 
-      // Check if user has entries in work_sessions
-      const { count: sessionCount, error: sessionErr } = await adminClient
-        .from("work_sessions")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId);
+      if (!force) {
+        // Check if user has entries in work_sessions
+        const { count: sessionCount, error: sessionErr } = await adminClient
+          .from("work_sessions")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId);
 
-      if (sessionErr) {
-        console.error("Error checking work_sessions for user:", sessionErr.message);
-      }
+        if (sessionErr) {
+          console.error("Error checking work_sessions for user:", sessionErr.message);
+        }
 
-      // Check if user has entries in payroll_period_items
-      const { count: payrollCount, error: payrollErr } = await adminClient
-        .from("payroll_period_items")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId);
+        // Check if user has entries in payroll_records
+        const { count: payrollCount, error: payrollErr } = await adminClient
+          .from("payroll_records")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId);
 
-      if (payrollErr) {
-        console.error("Error checking payroll_period_items for user:", payrollErr.message);
-      }
+        if (payrollErr) {
+          console.error("Error checking payroll_records for user:", payrollErr.message);
+        }
 
-      const hasHistory = (sessionCount || 0) > 0 || (payrollCount || 0) > 0;
+        const hasHistory = (sessionCount || 0) > 0 || (payrollCount || 0) > 0;
 
-      if (hasHistory) {
-        return NextResponse.json(
-          {
-            success: false,
-            hasHistory: true,
-            error: "Pengguna ini sudah memiliki riwayat sesi kerja / payroll. Untuk alasan keamanan laporan keuangan, pengguna ini tidak dapat dihapus permanen. Gunakan fitur Nonaktifkan.",
-          },
-          { status: 400 }
-        );
+        if (hasHistory) {
+          return NextResponse.json(
+            {
+              success: false,
+              hasHistory: true,
+              error: "Pengguna ini sudah memiliki riwayat sesi kerja / payroll di database.",
+            },
+            { status: 400 }
+          );
+        }
       }
 
       // Hard delete from public.users
