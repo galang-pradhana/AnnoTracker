@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+/* ─── Dark mode variant (class-based) ──────────────────────────────────────── */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ─── Design Tokens (AnnoTracker Brand Theme) ─────────────────────────────── */
+:root {
+  /* Surface & Base (Warm Cream & Soft Layers) */
+  --bg-base:          #FAF6F1;
+  --bg-surface:       #FFFFFF;
+  --bg-surface-alt:   #F3ECE3;
+  --border:           #E8DDD0;
+
+  /* Text (Warm Charcoal) */
+  --text-primary:     #2B2320;
+  --text-secondary:   #7A6F63;
+
+  /* Primary (Terracotta Orange) */
+  --primary:          #E8623D;
+  --primary-hover:    #D14F2C;
+  --primary-soft:     #FBE4DA;
+
+  /* Accent (Teal) */
+  --accent-teal:      #1F8A7A;
+  --accent-teal-soft: #DCF0EC;
+
+  /* Status Tokens */
+  --success:          #3E9A5B;
+  --warning:          #D9A441;
+  --danger:           #D1483F;
+}
+
+.dark {
+  /* Surface & Base (Warm Charcoal Layers) */
+  --bg-base:          #1C1815;
+  --bg-surface:       #252019;
+  --bg-surface-alt:   #2E2820;
+  --border:           #3A332A;
+
+  /* Text (Warm Cream) */
+  --text-primary:     #F5EFE8;
+  --text-secondary:   #B3A99C;
+
+  /* Primary (Terracotta Orange Bright) */
+  --primary:          #F0743F;
+  --primary-hover:    #FF8A56;
+  --primary-soft:     #3D2A1E;
+
+  /* Accent (Teal Bright) */
+  --accent-teal:      #3FB39E;
+  --accent-teal-soft: #1C3833;
+
+  /* Status Tokens */
+  --success:          #5CBB7C;
+  --warning:          #E6B85C;
+  --danger:           #E56B60;
+}
+
+/* ─── Base ───────────────────────────────────────────────────────────────────── */
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-inter, "Inter", Arial, Helvetica, sans-serif);
+  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+/* Smooth color transitions for interactive elements */
+header, main, div, section, card, button, input, select {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+/* ─── Scrollbar (dark-aware) ─────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-surface-alt); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+
+/* ─── Semantic Token Utility Helpers ────────────────────────────────────────── */
+.bg-base { background-color: var(--bg-base); }
+.bg-surface { background-color: var(--bg-surface); }
+.bg-surface-alt { background-color: var(--bg-surface-alt); }
+.border-theme { border-color: var(--border); }
+.text-primary-theme { color: var(--text-primary); }
+.text-secondary-theme { color: var(--text-secondary); }
+
+.bg-primary-theme { background-color: var(--primary); }
+.hover\:bg-primary-theme-hover:hover { background-color: var(--primary-hover); }
+.bg-primary-theme-soft { background-color: var(--primary-soft); }
+.text-primary-theme-brand { color: var(--primary); }
+
+.bg-accent-teal-theme { background-color: var(--accent-teal); }
+.bg-accent-teal-theme-soft { background-color: var(--accent-teal-soft); }
+.text-accent-teal-theme { color: var(--accent-teal); }
+
+.bg-warning-theme { background-color: var(--warning); }
+.text-warning-theme { color: var(--warning); }
+.bg-success-theme { background-color: var(--success); }
+.text-success-theme { color: var(--success); }
+.bg-danger-theme { background-color: var(--danger); }
+.text-danger-theme { color: var(--danger); }
