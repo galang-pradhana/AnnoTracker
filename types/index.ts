@@ -19,6 +19,7 @@ export interface User {
 export interface ClientAccount {
   id: string;
   name: string;
+  language?: string | null;
   is_active: boolean;
 }
 

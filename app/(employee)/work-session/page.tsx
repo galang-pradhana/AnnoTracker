@@ -27,9 +27,9 @@ import type {
 
 // Fallback Master Data if offline / initial load
 const MOCK_CLIENT_ACCOUNTS: ClientAccount[] = [
-  { id: "ca-1", name: "aatikah", is_active: true },
-  { id: "ca-2", name: "preecha", is_active: true },
-  { id: "ca-3", name: "farah", is_active: true },
+  { id: "ca-1", name: "preecha", language: "Thailand", is_active: true },
+  { id: "ca-2", name: "syimei", language: "China", is_active: true },
+  { id: "ca-3", name: "bjunwen", language: "China", is_active: true },
 ];
 
 const MOCK_TASK_TYPES: TaskType[] = [

@@ -200,7 +200,7 @@ export function TaskEntryForm({
                 Konteks Aktif:
               </span>
               <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-[var(--primary-soft)] text-[var(--primary)] font-bold border border-[var(--primary)]/20 truncate">
-                {selectedAccountObj.name}
+                {selectedAccountObj.name}{selectedAccountObj.language ? ` (${selectedAccountObj.language})` : ""}
               </span>
               <span className="text-[var(--text-secondary)]">→</span>
               <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-[var(--primary-soft)] text-[var(--primary)] font-bold border border-[var(--primary)]/20 truncate">
@@ -242,7 +242,7 @@ export function TaskEntryForm({
                 <option value="">-- Pilih Akun / Klien --</option>
                 {clientAccounts.map((acc) => (
                   <option key={acc.id} value={acc.id}>
-                    {acc.name}
+                    {acc.name}{acc.language ? ` (${acc.language})` : ""}
                   </option>
                 ))}
               </select>

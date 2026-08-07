@@ -92,9 +92,13 @@ export default function MasterDataPage() {
     return { success: true };
   };
 
-  const handleAddClientAccount = async (name: string) => {
+  const handleAddClientAccount = async (name: string, language?: string) => {
     const supabase = createClient();
-    const { data } = await supabase.from("client_accounts").insert({ name, is_active: true }).select().single();
+    const { data } = await supabase
+      .from("client_accounts")
+      .insert({ name, language: language || null, is_active: true })
+      .select()
+      .single();
     if (data) {
       setClientAccounts((prev) => [...prev, data]);
     }
@@ -108,11 +112,16 @@ export default function MasterDataPage() {
     );
   };
 
-  const handleEditClientAccount = async (id: string, newName: string) => {
+  const handleEditClientAccount = async (id: string, newName: string, newLanguage?: string) => {
     const supabase = createClient();
-    const { error } = await supabase.from("client_accounts").update({ name: newName }).eq("id", id);
+    const { error } = await supabase
+      .from("client_accounts")
+      .update({ name: newName, language: newLanguage || null })
+      .eq("id", id);
     if (error) throw error;
-    setClientAccounts((prev) => prev.map((c) => (c.id === id ? { ...c, name: newName } : c)));
+    setClientAccounts((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, name: newName, language: newLanguage || null } : c))
+    );
   };
 
   const handleDeleteClientAccount = async (id: string, force = false) => {
@@ -217,6 +226,7 @@ export default function MasterDataPage() {
             title="Daftar Nama Akun Klien"
             description="Daftar nama akun klien yang sedang dikerjakan oleh tim anotasi."
             items={clientAccounts}
+            hasLanguageColumn={true}
             onAddItem={handleAddClientAccount}
             onToggleStatus={handleToggleClientAccountStatus}
             onEditItem={handleEditClientAccount}

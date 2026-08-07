@@ -5,6 +5,7 @@ import React, { useState } from "react";
 export interface MasterDataItem {
   id: string;
   name: string;
+  language?: string | null;
   is_active: boolean;
 }
 
@@ -12,22 +13,59 @@ interface MasterDataTableProps {
   title: string;
   description: string;
   items: MasterDataItem[];
-  onAddItem: (name: string) => Promise<void>;
+  hasLanguageColumn?: boolean;
+  onAddItem: (name: string, language?: string) => Promise<void>;
   onToggleStatus: (id: string, currentStatus: boolean) => Promise<void>;
-  onEditItem?: (id: string, newName: string) => Promise<void>;
+  onEditItem?: (id: string, newName: string, newLanguage?: string) => Promise<void>;
   onDeleteItem?: (id: string, force?: boolean) => Promise<{ success: boolean; hasHistory?: boolean; error?: string }>;
+}
+
+const COMMON_LANGUAGES = ["Thailand", "China", "Indonesia", "Malaysia", "English", "Japan", "Korea"];
+
+function renderLanguageBadge(language?: string | null) {
+  if (!language) {
+    return <span className="text-xs text-[var(--text-secondary)] italic">-</span>;
+  }
+  const flagMap: Record<string, string> = {
+    thailand: "🇹🇭",
+    thai: "🇹🇭",
+    china: "🇨🇳",
+    chinese: "🇨🇳",
+    indonesia: "🇮🇩",
+    indonesian: "🇮🇩",
+    malaysia: "🇲🇾",
+    malay: "🇲🇾",
+    english: "🇬🇧",
+    us: "🇺🇸",
+    japan: "🇯🇵",
+    japanese: "🇯🇵",
+    korea: "🇰🇷",
+    korean: "🇰🇷",
+  };
+
+  const lower = language.toLowerCase().trim();
+  const flag = flagMap[lower] || "🌐";
+
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+      <span>{flag}</span>
+      <span>{language}</span>
+    </span>
+  );
 }
 
 export function MasterDataTable({
   title,
   description,
   items,
+  hasLanguageColumn = false,
   onAddItem,
   onToggleStatus,
   onEditItem,
   onDeleteItem,
 }: MasterDataTableProps) {
   const [newItemName, setNewItemName] = useState("");
+  const [newItemLanguage, setNewItemLanguage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -37,6 +75,7 @@ export function MasterDataTable({
   // Editing State
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [editingLanguage, setEditingLanguage] = useState("");
   const [isEditingSaving, setIsEditingSaving] = useState(false);
 
   // Deleting State
@@ -59,8 +98,9 @@ export function MasterDataTable({
     setErrorMsg(null);
     setIsSubmitting(true);
     try {
-      await onAddItem(newItemName.trim());
+      await onAddItem(newItemName.trim(), hasLanguageColumn ? newItemLanguage.trim() : undefined);
       setNewItemName("");
+      setNewItemLanguage("");
     } catch {
       setErrorMsg("Gagal menambahkan item baru.");
     } finally {
@@ -71,6 +111,7 @@ export function MasterDataTable({
   const startEdit = (item: MasterDataItem) => {
     setEditingId(item.id);
     setEditingName(item.name);
+    setEditingLanguage(item.language || "");
   };
 
   const handleSaveEdit = async (id: string) => {
@@ -84,11 +125,11 @@ export function MasterDataTable({
     setIsEditingSaving(true);
     try {
       if (onEditItem) {
-        await onEditItem(id, editingName.trim());
+        await onEditItem(id, editingName.trim(), hasLanguageColumn ? editingLanguage.trim() : undefined);
       }
       setEditingId(null);
     } catch {
-      setErrorMsg("Gagal memperbarui nama item.");
+      setErrorMsg("Gagal memperbarui item.");
     } finally {
       setIsEditingSaving(false);
     }
@@ -171,27 +212,60 @@ export function MasterDataTable({
       </div>
 
       {/* Add Item Form */}
-      <form onSubmit={handleAdd} className="flex gap-2">
-        <input
-          type="text"
-          placeholder={`Tambah ${title.toLowerCase()} baru...`}
-          value={newItemName}
-          onChange={(e) => setNewItemName(e.target.value)}
-          className="flex-1 px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] placeholder:text-[var(--text-secondary)]"
-        />
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="px-4 py-2.5 bg-[var(--primary)] hover:bg-[var(--primary-hover)] active:brightness-95 disabled:opacity-50 text-white font-medium text-xs rounded-xl shadow-xs transition-colors shrink-0 cursor-pointer"
-        >
-          {isSubmitting ? "Menambahkan..." : "+ Tambah"}
-        </button>
+      <form onSubmit={handleAdd} className="space-y-2">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="text"
+            placeholder={`Tambah ${title.toLowerCase()} baru...`}
+            value={newItemName}
+            onChange={(e) => setNewItemName(e.target.value)}
+            className="flex-1 px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] placeholder:text-[var(--text-secondary)]"
+          />
+
+          {hasLanguageColumn && (
+            <input
+              type="text"
+              placeholder="Bahasa (misal: Thailand, China)"
+              value={newItemLanguage}
+              onChange={(e) => setNewItemLanguage(e.target.value)}
+              className="sm:w-64 px-3.5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] placeholder:text-[var(--text-secondary)]"
+            />
+          )}
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="px-4 py-2.5 bg-[var(--primary)] hover:bg-[var(--primary-hover)] active:brightness-95 disabled:opacity-50 text-white font-medium text-xs rounded-xl shadow-xs transition-colors shrink-0 cursor-pointer"
+          >
+            {isSubmitting ? "Menambahkan..." : "+ Tambah"}
+          </button>
+        </div>
+
+        {hasLanguageColumn && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-xs">
+            <span className="text-[11px] text-[var(--text-secondary)] font-medium">Pilihan cepat bahasa:</span>
+            {COMMON_LANGUAGES.map((lang) => (
+              <button
+                key={lang}
+                type="button"
+                onClick={() => setNewItemLanguage(lang)}
+                className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-colors cursor-pointer ${
+                  newItemLanguage.toLowerCase() === lang.toLowerCase()
+                    ? "bg-[var(--primary-soft)] text-[var(--primary)] border-[var(--primary)]/30 font-bold"
+                    : "bg-[var(--bg-surface-alt)] text-[var(--text-secondary)] border-[var(--border)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                + {lang}
+              </button>
+            ))}
+          </div>
+        )}
       </form>
 
       {errorMsg && (
         <p className="text-xs text-[var(--danger)] bg-[var(--primary-soft)] p-2.5 rounded-lg border border-[var(--danger)]/30 flex items-center justify-between">
           <span>{errorMsg}</span>
-          <button type="button" onClick={() => setErrorMsg(null)} className="font-bold text-xs">✕</button>
+          <button type="button" onClick={() => setErrorMsg(null)} className="font-bold text-xs cursor-pointer">✕</button>
         </p>
       )}
 
@@ -201,6 +275,7 @@ export function MasterDataTable({
           <thead>
             <tr className="border-b border-[var(--border)] text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
               <th className="pb-3">Nama</th>
+              {hasLanguageColumn && <th className="pb-3">Bahasa</th>}
               <th className="pb-3">Status</th>
               <th className="pb-3 text-right">Aksi</th>
             </tr>
@@ -208,7 +283,7 @@ export function MasterDataTable({
           <tbody className="divide-y divide-[var(--border)]">
             {filteredItems.length === 0 ? (
               <tr>
-                <td colSpan={3} className="py-6 text-center text-[var(--text-secondary)] text-xs">
+                <td colSpan={hasLanguageColumn ? 4 : 3} className="py-6 text-center text-[var(--text-secondary)] text-xs">
                   Tidak ada data untuk status filter ini.
                 </td>
               </tr>
@@ -217,34 +292,36 @@ export function MasterDataTable({
                 <tr key={item.id} className="hover:bg-[var(--bg-surface-alt)]/50 transition-colors">
                   <td className="py-3 font-medium text-[var(--text-primary)]">
                     {editingId === item.id ? (
-                      <div className="flex items-center gap-2 max-w-md">
-                        <input
-                          type="text"
-                          value={editingName}
-                          onChange={(e) => setEditingName(e.target.value)}
-                          className="px-2.5 py-1 text-xs rounded-lg border border-[var(--primary)] bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
-                          autoFocus
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleSaveEdit(item.id)}
-                          disabled={isEditingSaving}
-                          className="px-2 py-1 text-xs bg-[var(--accent-teal)] text-white rounded-md font-bold"
-                        >
-                          {isEditingSaving ? "..." : "✓ Simpan"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingId(null)}
-                          className="px-2 py-1 text-xs text-[var(--text-secondary)]"
-                        >
-                          Batal
-                        </button>
-                      </div>
+                      <input
+                        type="text"
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        className="px-2.5 py-1 text-xs rounded-lg border border-[var(--primary)] bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
+                        autoFocus
+                      />
                     ) : (
                       <span>{item.name}</span>
                     )}
                   </td>
+
+                  {hasLanguageColumn && (
+                    <td className="py-3">
+                      {editingId === item.id ? (
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            placeholder="Bahasa"
+                            value={editingLanguage}
+                            onChange={(e) => setEditingLanguage(e.target.value)}
+                            className="w-32 px-2.5 py-1 text-xs rounded-lg border border-[var(--primary)] bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none"
+                          />
+                        </div>
+                      ) : (
+                        renderLanguageBadge(item.language)
+                      )}
+                    </td>
+                  )}
+
                   <td className="py-3">
                     {item.is_active ? (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[var(--accent-teal-soft)] text-[var(--accent-teal)] border border-[var(--accent-teal)]/30">
@@ -258,42 +335,65 @@ export function MasterDataTable({
                       </span>
                     )}
                   </td>
+
                   <td className="py-3 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      {onEditItem && editingId !== item.id && (
-                        <button
-                          type="button"
-                          onClick={() => startEdit(item)}
-                          className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-alt)] transition-colors cursor-pointer"
-                        >
-                          ✏️ Edit Nama
-                        </button>
-                      )}
+                      {editingId === item.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveEdit(item.id)}
+                            disabled={isEditingSaving}
+                            className="px-2.5 py-1 text-xs bg-[var(--accent-teal)] hover:brightness-95 text-white rounded-md font-bold cursor-pointer transition-colors"
+                          >
+                            {isEditingSaving ? "..." : "✓ Simpan"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(null)}
+                            className="px-2 py-1 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] cursor-pointer"
+                          >
+                            Batal
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          {onEditItem && (
+                            <button
+                              type="button"
+                              onClick={() => startEdit(item)}
+                              className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-alt)] transition-colors cursor-pointer"
+                            >
+                              ✏️ Edit
+                            </button>
+                          )}
 
-                      <button
-                        type="button"
-                        onClick={() => onToggleStatus(item.id, item.is_active)}
-                        className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${
-                          item.is_active
-                            ? "border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
-                            : "border-[var(--accent-teal)]/30 text-[var(--accent-teal)] hover:bg-[var(--accent-teal-soft)]"
-                        }`}
-                      >
-                        {item.is_active ? "Nonaktifkan" : "Aktifkan"}
-                      </button>
+                          <button
+                            type="button"
+                            onClick={() => onToggleStatus(item.id, item.is_active)}
+                            className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors cursor-pointer ${
+                              item.is_active
+                                ? "border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                                : "border-[var(--accent-teal)]/30 text-[var(--accent-teal)] hover:bg-[var(--accent-teal-soft)]"
+                            }`}
+                          >
+                            {item.is_active ? "Nonaktifkan" : "Aktifkan"}
+                          </button>
 
-                      {onDeleteItem && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDeletingItem(item);
-                            setDeleteWarning(null);
-                          }}
-                          className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[var(--danger)]/30 text-[var(--danger)] hover:bg-[var(--primary-soft)] transition-colors cursor-pointer"
-                          title="Hapus permanen master data ini"
-                        >
-                          🗑️ Hapus
-                        </button>
+                          {onDeleteItem && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeletingItem(item);
+                                setDeleteWarning(null);
+                              }}
+                              className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[var(--danger)]/30 text-[var(--danger)] hover:bg-[var(--primary-soft)] transition-colors cursor-pointer"
+                              title="Hapus permanen master data ini"
+                            >
+                              🗑️ Hapus
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </td>
