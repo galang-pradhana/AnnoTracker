@@ -287,6 +287,12 @@ export default function WorkSessionPage() {
               🧪 Assessment
             </Link>
             <Link
+              href={ROUTES.EMPLOYEE_SOURCE}
+              className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors hidden sm:inline-block"
+            >
+              📂 Source
+            </Link>
+            <Link
               href={ROUTES.EMPLOYEE_PROFILE}
               className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors hidden sm:inline-block"
             >

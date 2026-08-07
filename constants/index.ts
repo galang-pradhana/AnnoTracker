@@ -30,4 +30,6 @@ export const ROUTES = {
   OWNER_USERS: "/users",
   OWNER_ASSESSMENT: "/assessment",
   OWNER_SETTINGS: "/settings",
+  OWNER_SOURCE: "/source",
+  EMPLOYEE_SOURCE: "/employee-source",
 } as const;
