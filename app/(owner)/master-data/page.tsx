@@ -19,11 +19,19 @@ export default function MasterDataPage() {
       const supabase = createClient();
       const [taskRes, accountRes] = await Promise.all([
         supabase.from("task_types").select("*").order("name"),
-        supabase.from("client_accounts").select("*").order("name"),
+        // Try selecting with language column, fallback to without if column doesn't exist
+        supabase.from("client_accounts").select("id, name, is_active").order("name"),
       ]);
 
       if (taskRes.data) setTaskTypes(taskRes.data);
-      if (accountRes.data) setClientAccounts(accountRes.data);
+      if (accountRes.data) {
+        // Try to also fetch language column (may not exist yet)
+        const { data: withLang } = await supabase
+          .from("client_accounts")
+          .select("id, name, language, is_active")
+          .order("name");
+        setClientAccounts(withLang ?? accountRes.data);
+      }
     } catch {
       // Fallback state if offline
     } finally {
@@ -94,13 +102,28 @@ export default function MasterDataPage() {
 
   const handleAddClientAccount = async (name: string, language?: string) => {
     const supabase = createClient();
+    // Build insert payload — only include language if provided (column may not exist yet)
+    const payload: Record<string, unknown> = { name, is_active: true };
+    if (language) payload.language = language;
+
     const { data, error } = await supabase
       .from("client_accounts")
-      .insert({ name, language: language || null, is_active: true })
+      .insert(payload)
       .select()
       .single();
+
     if (error) {
-      console.error("Error adding client account:", error);
+      // If language column doesn't exist, retry without it
+      if (error.code === "PGRST204" && language) {
+        const { data: data2, error: error2 } = await supabase
+          .from("client_accounts")
+          .insert({ name, is_active: true })
+          .select()
+          .single();
+        if (error2) throw error2;
+        if (data2) setClientAccounts((prev) => [...prev, { ...data2, language: null }]);
+        return;
+      }
       throw error;
     }
     if (data) {
@@ -118,10 +141,27 @@ export default function MasterDataPage() {
 
   const handleEditClientAccount = async (id: string, newName: string, newLanguage?: string) => {
     const supabase = createClient();
+    // Build update payload — only include language if provided
+    const payload: Record<string, unknown> = { name: newName };
+    if (newLanguage !== undefined) payload.language = newLanguage || null;
+
     const { error } = await supabase
       .from("client_accounts")
-      .update({ name: newName, language: newLanguage || null })
+      .update(payload)
       .eq("id", id);
+
+    // If language column doesn't exist, retry with just name
+    if (error && error.code === "PGRST204") {
+      const { error: error2 } = await supabase
+        .from("client_accounts")
+        .update({ name: newName })
+        .eq("id", id);
+      if (error2) throw error2;
+      setClientAccounts((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, name: newName } : c))
+      );
+      return;
+    }
     if (error) throw error;
     setClientAccounts((prev) =>
       prev.map((c) => (c.id === id ? { ...c, name: newName, language: newLanguage || null } : c))
