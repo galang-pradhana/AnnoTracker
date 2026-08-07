@@ -94,11 +94,15 @@ export default function MasterDataPage() {
 
   const handleAddClientAccount = async (name: string, language?: string) => {
     const supabase = createClient();
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("client_accounts")
       .insert({ name, language: language || null, is_active: true })
       .select()
       .single();
+    if (error) {
+      console.error("Error adding client account:", error);
+      throw error;
+    }
     if (data) {
       setClientAccounts((prev) => [...prev, data]);
     }
