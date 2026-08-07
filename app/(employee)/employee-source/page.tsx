@@ -7,6 +7,11 @@ import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { AppLogo } from "@/components/shared/AppLogo";
 import { ROUTES } from "@/constants";
 
+interface GuidelineLink {
+  label: string;
+  url: string;
+}
+
 interface SourceGuideline {
   id: string;
   title: string;
@@ -14,7 +19,16 @@ interface SourceGuideline {
   category: string;
   icon: string;
   drive_url: string;
+  links: GuidelineLink[];
   display_order: number;
+}
+
+// Helper: ambil semua link (merge links JSONB + fallback drive_url)
+function getAllLinks(g: SourceGuideline): GuidelineLink[] {
+  const multi = Array.isArray(g.links) ? g.links : [];
+  if (multi.length > 0) return multi;
+  if (g.drive_url) return [{ label: 'Buka Guideline', url: g.drive_url }];
+  return [];
 }
 
 export default function EmployeeSourcePage() {
@@ -150,27 +164,34 @@ export default function EmployeeSourcePage() {
                 </div>
 
                 <div className="flex gap-2">
-                  <a
-                    href={g.drive_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white text-xs font-bold rounded-xl transition-colors"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                    Buka Guideline
-                  </a>
-                  <button
-                    onClick={() => handleCopy(g.id, g.drive_url)}
-                    className={`px-3 py-2.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                      copiedId === g.id
-                        ? "bg-[var(--accent-teal-soft)] border-[var(--accent-teal)]/30 text-[var(--accent-teal)]"
-                        : "bg-[var(--bg-surface-alt)] border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-                    }`}
-                  >
-                    {copiedId === g.id ? "✓ Salin" : "Salin"}
-                  </button>
+                  {getAllLinks(g).map((lnk, idx) => {
+                    const copyKey = `${g.id}-${idx}`;
+                    return (
+                      <React.Fragment key={idx}>
+                        <a
+                          href={lnk.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white text-xs font-bold rounded-xl transition-colors overflow-hidden"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                          <span className="truncate">{lnk.label || `Link ${idx + 1}`}</span>
+                        </a>
+                        <button
+                          onClick={() => handleCopy(copyKey, lnk.url)}
+                          className={`px-2.5 py-2.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer shrink-0 ${
+                            copiedId === copyKey
+                              ? 'bg-[var(--accent-teal-soft)] border-[var(--accent-teal)]/30 text-[var(--accent-teal)]'
+                              : 'bg-[var(--bg-surface-alt)] border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                          }`}
+                        >
+                          {copiedId === copyKey ? '✓' : '📋'}
+                        </button>
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
               </div>
             ))}
