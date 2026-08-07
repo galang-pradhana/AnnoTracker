@@ -97,6 +97,9 @@ export default function EmployeeAssessmentListPage() {
             <Link href={ROUTES.EMPLOYEE_ASSESSMENT} className="text-xs text-[var(--primary)] bg-[var(--primary-soft)] font-bold px-2.5 py-1 rounded-lg transition-colors">
               🧪 Assessment
             </Link>
+            <Link href={ROUTES.EMPLOYEE_SOURCE} className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors">
+              📂 Source
+            </Link>
             <Link href={ROUTES.EMPLOYEE_PROFILE} className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors">
               👤 Profil
             </Link>

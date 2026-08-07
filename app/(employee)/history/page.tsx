@@ -241,6 +241,9 @@ export default function EmployeeHistoryPage() {
             <Link href={ROUTES.EMPLOYEE_ASSESSMENT} className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors">
               🧪 Assessment
             </Link>
+            <Link href={ROUTES.EMPLOYEE_SOURCE} className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors">
+              📂 Source
+            </Link>
             <Link href={ROUTES.EMPLOYEE_PROFILE} className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors">
               👤 Profil
             </Link>
