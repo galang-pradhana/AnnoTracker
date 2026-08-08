@@ -206,9 +206,11 @@ export async function POST(req: Request) {
         ],
         comparisonOptions: [
           { value: "left_much", label: "Left Much Better" },
+          { value: "left_better", label: "Left Better" },
           { value: "left_slightly", label: "Left Slightly Better" },
           { value: "same", label: "Same" },
           { value: "right_slightly", label: "Right Slightly Better" },
+          { value: "right_better", label: "Right Better" },
           { value: "right_much", label: "Right Much Better" },
         ],
       };
@@ -588,11 +590,13 @@ export async function POST(req: Request) {
           { id: "B_C", left: "Image B", right: "Image C", label: "Comparasi Image B vs Image C" },
         ],
         comparisonOptions: [
+          { value: "left_much", label: "Left Much Better" },
           { value: "left_better", label: "Left Better" },
           { value: "left_slightly", label: "Left Slightly Better" },
-          { value: "same", label: "About the Same" },
+          { value: "same", label: "Same" },
           { value: "right_slightly", label: "Right Slightly Better" },
           { value: "right_better", label: "Right Better" },
+          { value: "right_much", label: "Right Much Better" },
         ],
       };
 

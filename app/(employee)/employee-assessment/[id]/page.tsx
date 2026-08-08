@@ -79,9 +79,11 @@ const DEFAULT_PAIRWISE_PAIRS: ComparisonPair[] = [
 
 const DEFAULT_PAIRWISE_OPTIONS: ComparisonOption[] = [
   { value: "left_much", label: "Left Much Better" },
+  { value: "left_better", label: "Left Better" },
   { value: "left_slightly", label: "Left Slightly Better" },
   { value: "same", label: "Same" },
   { value: "right_slightly", label: "Right Slightly Better" },
+  { value: "right_better", label: "Right Better" },
   { value: "right_much", label: "Right Much Better" },
 ];
 
@@ -103,6 +105,32 @@ function getQAns(answers: ItemAnswers, itemId: string, response: string, qId: st
   const responseAnswers = answers?.[itemId]?.[response];
   if (!responseAnswers) return null;
   return responseAnswers[qId] ?? null;
+}
+
+function getSatisfyingRatingLabel(
+  answers: ItemAnswers,
+  questions: Question[],
+  itemId: string,
+  responseLabel: string
+): { label: string; isAnswered: boolean } {
+  const satQ = questions.find(
+    (q) => q.id === "q5" || q.id === "q_satisfying" || q.text.toLowerCase().includes("satisfying")
+  ) || questions[questions.length - 1];
+
+  if (!satQ) return { label: "Belum di-rating", isAnswered: false };
+
+  const val = getQAns(answers, itemId, responseLabel, satQ.id);
+  if (!val) return { label: "Belum di-rating", isAnswered: false };
+
+  const selectedVal = typeof val === "string" ? val : (val as AnswerObj)?.value;
+  if (!selectedVal) return { label: "Belum di-rating", isAnswered: false };
+
+  const opt = satQ.options?.find((o) => o.value === selectedVal);
+  if (opt) {
+    return { label: opt.label, isAnswered: true };
+  }
+
+  return { label: String(selectedVal), isAnswered: true };
 }
 
 // ── Single Question renderer ──────────────────────────────────────────────────
@@ -632,23 +660,35 @@ export default function EmployeeAssessmentTakePage() {
                         <div className="text-[11px] font-bold text-[var(--accent-teal)]">
                           🔍 Ringkasan Semua Response untuk Perbandingan:
                         </div>
-                        {responseLabels.map((r) => (
-                          <div key={r} className="p-3 rounded-xl bg-[var(--bg-surface-alt)] border border-[var(--border)] space-y-1">
-                            <span className="text-[11px] font-bold text-[var(--primary)]">{r}</span>
-                            {(currentItem.responses?.[r]?.startsWith("http") || currentItem.responses?.[r]?.startsWith("/")) ? (
-                              /* eslint-disable-next-html-element-suppression */
-                              <img
-                                src={currentItem.responses[r]}
-                                alt={r}
-                                className="w-full h-24 object-cover rounded-lg border border-[var(--border)]"
-                              />
-                            ) : (
-                              <p className="text-[11px] text-[var(--text-secondary)] line-clamp-3 leading-relaxed">
-                                {currentItem.responses?.[r]}
-                              </p>
-                            )}
-                          </div>
-                        ))}
+                        {responseLabels.map((r) => {
+                          const satInfo = getSatisfyingRatingLabel(answers, questions, currentItem.id, r);
+                          return (
+                            <div key={r} className="p-3 rounded-xl bg-[var(--bg-surface-alt)] border border-[var(--border)] space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-bold text-[var(--primary)]">{r}</span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                                  satInfo.isAnswered
+                                    ? "bg-[var(--accent-teal-soft)] text-[var(--accent-teal)] border-[var(--accent-teal)]/30"
+                                    : "bg-[var(--bg-surface)] text-[var(--text-secondary)] border-[var(--border)]"
+                                }`}>
+                                  {satInfo.label}
+                                </span>
+                              </div>
+                              {(currentItem.responses?.[r]?.startsWith("http") || currentItem.responses?.[r]?.startsWith("/")) ? (
+                                /* eslint-disable-next-html-element-suppression */
+                                <img
+                                  src={currentItem.responses[r]}
+                                  alt={r}
+                                  className="w-full h-24 object-cover rounded-lg border border-[var(--border)]"
+                                />
+                              ) : (
+                                <p className="text-[11px] text-[var(--text-secondary)] line-clamp-3 leading-relaxed">
+                                  {currentItem.responses?.[r]}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -696,6 +736,9 @@ export default function EmployeeAssessmentTakePage() {
                       <div className="space-y-6">
                         {comparisonPairs.map((pair) => {
                           const currentVal = getQAns(answers, currentItem.id, "comparison", pair.id) as string | null;
+                          const leftSat = getSatisfyingRatingLabel(answers, questions, currentItem.id, pair.left);
+                          const rightSat = getSatisfyingRatingLabel(answers, questions, currentItem.id, pair.right);
+
                           return (
                             <div key={pair.id} className="p-4 rounded-2xl bg-[var(--bg-surface-alt)] border border-[var(--border)] space-y-3">
                               <div className="flex items-center justify-between">
@@ -707,33 +750,57 @@ export default function EmployeeAssessmentTakePage() {
                                 </h4>
                               </div>
 
-                              {/* Preview snippet left vs right */}
+                              {/* Preview snippet left vs right with Satisfying rating badge */}
                               <div className="grid grid-cols-2 gap-2 text-[11px] bg-[var(--bg-surface)] p-2.5 rounded-xl border border-[var(--border)]">
                                 <div>
-                                  <span className="font-bold text-[var(--primary)]">Left ({pair.left}):</span>
+                                  <div className="flex items-center justify-between gap-1 mb-1">
+                                    <span className="font-bold text-[var(--primary)]">Left ({pair.left}):</span>
+                                  </div>
                                   {(currentItem.responses?.[pair.left]?.startsWith("http") || currentItem.responses?.[pair.left]?.startsWith("/")) ? (
                                     /* eslint-disable-next-html-element-suppression */
                                     <img
                                       src={currentItem.responses[pair.left]}
                                       alt={pair.left}
-                                      className="w-full h-32 object-cover rounded-lg mt-1 border border-[var(--border)]"
+                                      className="w-full h-32 object-cover rounded-lg border border-[var(--border)]"
                                     />
                                   ) : (
-                                    <p className="text-[var(--text-secondary)] line-clamp-2 mt-0.5">{currentItem.responses?.[pair.left]}</p>
+                                    <p className="text-[var(--text-secondary)] line-clamp-2">{currentItem.responses?.[pair.left]}</p>
                                   )}
+                                  <div className="mt-2 pt-1.5 border-t border-[var(--border)]">
+                                    <span className="text-[10px] text-[var(--text-secondary)] font-semibold block mb-0.5">Satisfying ({pair.left}):</span>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md inline-block border ${
+                                      leftSat.isAnswered
+                                        ? "bg-[var(--accent-teal-soft)] text-[var(--accent-teal)] border-[var(--accent-teal)]/30"
+                                        : "bg-[var(--bg-surface-alt)] text-[var(--text-secondary)] border-[var(--border)]"
+                                    }`}>
+                                      {leftSat.label}
+                                    </span>
+                                  </div>
                                 </div>
                                 <div className="border-l border-[var(--border)] pl-2">
-                                  <span className="font-bold text-[var(--primary)]">Right ({pair.right}):</span>
+                                  <div className="flex items-center justify-between gap-1 mb-1">
+                                    <span className="font-bold text-[var(--primary)]">Right ({pair.right}):</span>
+                                  </div>
                                   {(currentItem.responses?.[pair.right]?.startsWith("http") || currentItem.responses?.[pair.right]?.startsWith("/")) ? (
                                     /* eslint-disable-next-html-element-suppression */
                                     <img
                                       src={currentItem.responses[pair.right]}
                                       alt={pair.right}
-                                      className="w-full h-32 object-cover rounded-lg mt-1 border border-[var(--border)]"
+                                      className="w-full h-32 object-cover rounded-lg border border-[var(--border)]"
                                     />
                                   ) : (
-                                    <p className="text-[var(--text-secondary)] line-clamp-2 mt-0.5">{currentItem.responses?.[pair.right]}</p>
+                                    <p className="text-[var(--text-secondary)] line-clamp-2">{currentItem.responses?.[pair.right]}</p>
                                   )}
+                                  <div className="mt-2 pt-1.5 border-t border-[var(--border)]">
+                                    <span className="text-[10px] text-[var(--text-secondary)] font-semibold block mb-0.5">Satisfying ({pair.right}):</span>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md inline-block border ${
+                                      rightSat.isAnswered
+                                        ? "bg-[var(--accent-teal-soft)] text-[var(--accent-teal)] border-[var(--accent-teal)]/30"
+                                        : "bg-[var(--bg-surface-alt)] text-[var(--text-secondary)] border-[var(--border)]"
+                                    }`}>
+                                      {rightSat.label}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
 
