@@ -87,6 +87,92 @@ const DEFAULT_PAIRWISE_OPTIONS: ComparisonOption[] = [
   { value: "right_much", label: "Right Much Better" },
 ];
 
+export interface VcgComparisonQuestion {
+  id: string;
+  text: string;
+  options: { value: string; label: string }[];
+}
+
+export const VCG_COMPARISON_QUESTIONS: VcgComparisonQuestion[] = [
+  {
+    id: "vcg_cq1",
+    text: "1. Overall, which side of the image is better?",
+    options: [
+      { value: "left_better", label: "a. Left Better" },
+      { value: "left_slightly", label: "b. Left Slightly Better" },
+      { value: "same", label: "c. About the Same" },
+      { value: "right_slightly", label: "d. Right Slightly Better" },
+      { value: "right_better", label: "e. Right Better" },
+    ],
+  },
+  {
+    id: "vcg_cq2",
+    text: "2. Between the two images, which has better visual quality?",
+    options: [
+      { value: "left_better", label: "a. Left Better" },
+      { value: "left_slightly", label: "b. Left Slightly Better" },
+      { value: "same", label: "c. About the Same" },
+      { value: "right_slightly", label: "d. Right Slightly Better" },
+      { value: "right_better", label: "e. Right Better" },
+    ],
+  },
+  {
+    id: "vcg_cq3",
+    text: "3. Between the two images, which is better formed and more structurally sound?",
+    options: [
+      { value: "left_better", label: "a. Left Better" },
+      { value: "left_slightly", label: "b. Left Slightly Better" },
+      { value: "same", label: "c. About the Same" },
+      { value: "right_slightly", label: "d. Right Slightly Better" },
+      { value: "right_better", label: "e. Right Better" },
+    ],
+  },
+  {
+    id: "vcg_cq4",
+    text: "4. Between the two images, which better represents what was requested in the prompt?",
+    options: [
+      { value: "left_better", label: "a. Left Better" },
+      { value: "left_slightly", label: "b. Left Slightly Better" },
+      { value: "same", label: "c. About the Same" },
+      { value: "right_slightly", label: "d. Right Slightly Better" },
+      { value: "right_better", label: "e. Right Better" },
+    ],
+  },
+  {
+    id: "vcg_cq5",
+    text: "5. (Photorealistic style) Between the two images, which one looks more like a real photograph?",
+    options: [
+      { value: "left_better", label: "a. Left Better" },
+      { value: "left_slightly", label: "b. Left Slightly Better" },
+      { value: "same", label: "c. About the Same" },
+      { value: "right_slightly", label: "d. Right Slightly Better" },
+      { value: "right_better", label: "e. Right Better" },
+    ],
+  },
+  {
+    id: "vcg_cq6",
+    text: "6. Between the two images, which has better text rendering quality?",
+    options: [
+      { value: "left_better", label: "a. Left Better" },
+      { value: "left_slightly", label: "b. Left Slightly Better" },
+      { value: "same_na", label: "c. About the Same or Not Applicable" },
+      { value: "right_slightly", label: "d. Right Slightly Better" },
+      { value: "right_better", label: "e. Right Better" },
+    ],
+  },
+  {
+    id: "vcg_cq7",
+    text: "7. Between the two images, which has better aesthetic quality?",
+    options: [
+      { value: "left_better", label: "a. Left Better" },
+      { value: "left_slightly", label: "b. Left Slightly Better" },
+      { value: "same", label: "c. About the Same" },
+      { value: "right_slightly", label: "d. Right Slightly Better" },
+      { value: "right_better", label: "e. Right Better" },
+    ],
+  },
+];
+
 // ── Helper: format multi-line text ────────────────────────────────────────────
 function MultiLineText({ text }: { text: string }) {
   return (
@@ -403,8 +489,9 @@ export default function EmployeeAssessmentTakePage() {
     const qs = task.form_template?.questions || [];
     const responses = task.form_template?.responseLabels || ["A", "B", "C"];
     const pairs = task.form_template?.comparisonPairs || DEFAULT_PAIRWISE_PAIRS;
+    const isVcg = task.task_type === "VCG";
 
-    let total = items.length * (responses.length * qs.length + pairs.length) + 2; // +2 for final justifications
+    let total = items.length * (responses.length * qs.length + (isVcg ? pairs.length * VCG_COMPARISON_QUESTIONS.length : pairs.length)) + 2;
     let filled = 0;
 
     for (const item of items) {
@@ -415,8 +502,15 @@ export default function EmployeeAssessmentTakePage() {
         }
       }
       for (const pair of pairs) {
-        const v = getQAns(answers, item.id, "comparison", pair.id);
-        if (v !== null && v !== "") filled++;
+        if (isVcg) {
+          for (const vcgQ of VCG_COMPARISON_QUESTIONS) {
+            const v = getQAns(answers, item.id, "comparison", `${pair.id}_${vcgQ.id}`);
+            if (v !== null && v !== "") filled++;
+          }
+        } else {
+          const v = getQAns(answers, item.id, "comparison", pair.id);
+          if (v !== null && v !== "") filled++;
+        }
       }
     }
 
@@ -432,6 +526,7 @@ export default function EmployeeAssessmentTakePage() {
     const qs = task.form_template?.questions || [];
     const responses = task.form_template?.responseLabels || ["A", "B", "C"];
     const pairs = task.form_template?.comparisonPairs || DEFAULT_PAIRWISE_PAIRS;
+    const isVcg = task.task_type === "VCG";
 
     for (const item of items) {
       for (const r of responses) {
@@ -442,8 +537,15 @@ export default function EmployeeAssessmentTakePage() {
         }
       }
       for (const pair of pairs) {
-        const v = getQAns(answers, item.id, "comparison", pair.id);
-        if (v === null || v === "") return false;
+        if (isVcg) {
+          for (const vcgQ of VCG_COMPARISON_QUESTIONS) {
+            const v = getQAns(answers, item.id, "comparison", `${pair.id}_${vcgQ.id}`);
+            if (v === null || v === "") return false;
+          }
+        } else {
+          const v = getQAns(answers, item.id, "comparison", pair.id);
+          if (v === null || v === "") return false;
+        }
       }
     }
     return justificationId.trim().length > 0 && justificationEn.trim().length > 0;
@@ -793,31 +895,70 @@ export default function EmployeeAssessmentTakePage() {
                                 </div>
                               </div>
 
-                              {/* 5 Comparison Options */}
-                              <div className="space-y-2 pt-1">
-                                {comparisonOptions.map((opt) => {
-                                  const isSelected = currentVal === opt.value;
-                                  return (
-                                    <label
-                                      key={opt.value}
-                                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-medium cursor-pointer transition-all ${
-                                        isSelected
-                                          ? "bg-[var(--primary-soft)] border-[var(--primary)] text-[var(--primary)] font-bold"
-                                          : "bg-[var(--bg-surface)] border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-alt)]"
-                                      } ${submitted ? "cursor-not-allowed opacity-80" : ""}`}
-                                    >
-                                      <input
-                                        type="radio"
-                                        disabled={submitted}
-                                        checked={isSelected}
-                                        onChange={() => setAnswer(currentItem.id, "comparison", pair.id, opt.value)}
-                                        className="accent-[var(--primary)] shrink-0"
-                                      />
-                                      <span>{opt.label}</span>
-                                    </label>
-                                  );
-                                })}
-                              </div>
+                              {/* 7 VCG Comparison Questions OR Default Single Pairwise Option */}
+                              {task.task_type === "VCG" ? (
+                                <div className="space-y-4 pt-2">
+                                  {VCG_COMPARISON_QUESTIONS.map((vcgQ) => {
+                                    const vcgVal = getQAns(answers, currentItem.id, "comparison", `${pair.id}_${vcgQ.id}`) as string | null;
+                                    return (
+                                      <div key={vcgQ.id} className="space-y-2 p-3.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)]">
+                                        <p className="text-xs font-bold text-[var(--text-primary)] leading-snug">
+                                          {vcgQ.text}
+                                        </p>
+                                        <div className="space-y-1.5 pt-1">
+                                          {vcgQ.options.map((opt) => {
+                                            const isSelected = vcgVal === opt.value;
+                                            return (
+                                              <label
+                                                key={opt.value}
+                                                className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-medium cursor-pointer transition-all ${
+                                                  isSelected
+                                                    ? "bg-[var(--primary-soft)] border-[var(--primary)] text-[var(--primary)] font-bold"
+                                                    : "bg-[var(--bg-surface-alt)] border-[var(--border)] text-[var(--text-primary)] hover:brightness-95"
+                                                } ${submitted ? "cursor-not-allowed opacity-80" : ""}`}
+                                              >
+                                                <input
+                                                  type="radio"
+                                                  disabled={submitted}
+                                                  checked={isSelected}
+                                                  onChange={() => setAnswer(currentItem.id, "comparison", `${pair.id}_${vcgQ.id}`, opt.value)}
+                                                  className="accent-[var(--primary)] shrink-0"
+                                                />
+                                                <span>{opt.label}</span>
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="space-y-2 pt-1">
+                                  {comparisonOptions.map((opt) => {
+                                    const isSelected = currentVal === opt.value;
+                                    return (
+                                      <label
+                                        key={opt.value}
+                                        className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-medium cursor-pointer transition-all ${
+                                          isSelected
+                                            ? "bg-[var(--primary-soft)] border-[var(--primary)] text-[var(--primary)] font-bold"
+                                            : "bg-[var(--bg-surface)] border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--bg-surface-alt)]"
+                                        } ${submitted ? "cursor-not-allowed opacity-80" : ""}`}
+                                      >
+                                        <input
+                                          type="radio"
+                                          disabled={submitted}
+                                          checked={isSelected}
+                                          onChange={() => setAnswer(currentItem.id, "comparison", pair.id, opt.value)}
+                                          className="accent-[var(--primary)] shrink-0"
+                                        />
+                                        <span>{opt.label}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
