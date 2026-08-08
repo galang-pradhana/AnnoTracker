@@ -69,40 +69,7 @@ export default function EmployeeSourcePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] pb-16 transition-colors duration-200">
-      {/* Header */}
-      <header className="bg-[var(--bg-surface)] border-b border-[var(--border)] px-4 py-3 sticky top-0 z-10 shadow-2xs transition-colors">
-        <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <AppLogo variant="icon" size="sm" />
-            <div>
-              <h1 className="text-sm font-bold text-[var(--text-primary)]">📂 Source Guideline</h1>
-              <p className="text-[11px] text-[var(--text-secondary)]">Panduan pengerjaan task annotasi</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Link href={ROUTES.EMPLOYEE_WORK_SESSION} className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors">
-              ✏️ Catat Kerja
-            </Link>
-            <Link href={ROUTES.EMPLOYEE_HISTORY} className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors">
-              📅 Riwayat
-            </Link>
-            <Link href={ROUTES.EMPLOYEE_ASSESSMENT} className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors">
-              🧪 Assessment
-            </Link>
-            <Link href={ROUTES.EMPLOYEE_SOURCE} className="text-xs text-[var(--primary)] bg-[var(--primary-soft)] font-bold px-2.5 py-1 rounded-lg transition-colors">
-              📂 Source
-            </Link>
-            <Link href={ROUTES.EMPLOYEE_PROFILE} className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors">
-              👤 Profil
-            </Link>
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
-
-      {/* Main */}
-      <main className="max-w-2xl mx-auto px-4 pt-6 space-y-4">
+    <div className="max-w-2xl mx-auto px-4 pt-6 space-y-4">
 
         {/* Greeting Banner */}
         <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-[var(--primary)] to-[var(--primary-hover)] rounded-2xl text-white shadow-sm">
@@ -197,7 +164,6 @@ export default function EmployeeSourcePage() {
             ))}
           </div>
         )}
-      </main>
     </div>
   );
 }

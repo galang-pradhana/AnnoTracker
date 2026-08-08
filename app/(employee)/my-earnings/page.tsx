@@ -67,22 +67,7 @@ export default function MyEarningsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-12">
-      {/* Header Navigation */}
-      <header className="bg-white border-b border-slate-100 px-4 py-3">
-        <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <Link href={ROUTES.EMPLOYEE_WORK_SESSION} className="text-xs text-slate-500 hover:text-slate-900 font-semibold">
-              &larr; Halaman Kerja
-            </Link>
-            <span className="text-slate-300">|</span>
-            <h1 className="text-sm font-bold text-slate-900">Rincian Gaji Saya</h1>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-2xl mx-auto px-4 pt-4 space-y-4">
+    <div className="max-w-2xl mx-auto px-4 pt-6 space-y-4">
         {/* Total Earnings Card */}
         <div className="bg-gradient-to-br from-teal-600 to-teal-700 rounded-2xl p-6 text-white shadow-md space-y-4">
           <div>
@@ -157,7 +142,6 @@ export default function MyEarningsPage() {
             </div>
           )}
         </div>
-      </main>
     </div>
   );
 }

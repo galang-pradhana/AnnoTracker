@@ -130,36 +130,7 @@ export default function OwnerCalendarPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-16">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-100 px-6 py-4">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">📅 Kalender Tim</h1>
-            <p className="text-xs text-slate-500">Rekap jam kerja seluruh karyawan per hari</p>
-          </div>
-          <nav className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
-            <span className="px-3 py-1.5 rounded-lg bg-white text-slate-900 shadow-sm">Kalender</span>
-            <Link href={ROUTES.OWNER_DASHBOARD} className="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900">
-              Dashboard
-            </Link>
-            <Link href={ROUTES.OWNER_PAYROLL} className="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900">
-              Payroll
-            </Link>
-            <Link href={ROUTES.OWNER_MASTER_DATA} className="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900">
-              Master Data
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="px-3 py-1.5 rounded-lg text-red-500 hover:text-red-700"
-            >
-              Keluar
-            </button>
-          </nav>
-        </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto px-6 pt-6 space-y-5">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 space-y-5">
         {/* Monthly Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
@@ -276,7 +247,6 @@ export default function OwnerCalendarPage() {
             </span>
           ))}
         </div>
-      </main>
 
       {/* Day Detail Modal */}
       {selectedDayData && (

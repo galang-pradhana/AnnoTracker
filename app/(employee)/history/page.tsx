@@ -218,44 +218,7 @@ export default function EmployeeHistoryPage() {
     determineUserHourlyRate(userId, dayHours, dateStr, salaryTiers, userSalaryRates);
 
   return (
-    <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] pb-16 transition-colors duration-200">
-      {/* Top Sticky Header */}
-      <header className="sticky top-0 z-10 bg-[var(--bg-surface)]/95 backdrop-blur-md border-b border-[var(--border)] px-4 py-3 shadow-xs">
-        <div className="max-w-2xl mx-auto flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <AppLogo variant="icon" size="sm" />
-            <div>
-              <h1 className="text-sm font-bold text-[var(--text-primary)] leading-tight">
-                Riwayat
-              </h1>
-              <p className="text-[11px] text-[var(--text-secondary)]">{MONTH_NAMES[viewMonth]} {viewYear}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <Link href={ROUTES.EMPLOYEE_WORK_SESSION} className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors">
-              ✏️ Catat Kerja
-            </Link>
-            <Link href={ROUTES.EMPLOYEE_HISTORY} className="text-xs text-[var(--primary)] font-bold px-2.5 py-1 bg-[var(--primary-soft)] rounded-lg transition-colors">
-              📅 Riwayat
-            </Link>
-            <Link href={ROUTES.EMPLOYEE_ASSESSMENT} className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors">
-              🧪 Assessment
-            </Link>
-            <Link href={ROUTES.EMPLOYEE_SOURCE} className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors">
-              📂 Source
-            </Link>
-            <Link href={ROUTES.EMPLOYEE_PROFILE} className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors">
-              👤 Profil
-            </Link>
-            <ThemeToggle />
-            <button onClick={handleLogout} className="text-xs text-[var(--text-secondary)] hover:text-[var(--danger)] font-medium px-1.5 py-1 transition-colors cursor-pointer">
-              Keluar
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-2xl mx-auto px-4 pt-4 space-y-4">
+    <div className="max-w-2xl mx-auto px-4 pt-6 space-y-4">
         {/* 1. Ringkasan Pendapatan Bulanan */}
         <div className="bg-[var(--bg-surface)] rounded-2xl p-5 border border-[var(--border)] text-[var(--text-primary)] shadow-xs space-y-3">
           <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
@@ -443,7 +406,6 @@ export default function EmployeeHistoryPage() {
             )}
           </div>
         )}
-      </main>
 
       {/* Detail Modal Saat Tanggal Ditekan */}
       {selectedDay && (() => {

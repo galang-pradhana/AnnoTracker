@@ -204,30 +204,7 @@ export default function OwnerSourcePage() {
   // Render
   // ────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] pb-16 transition-colors duration-200">
-      {/* Header */}
-      <header className="bg-[var(--bg-surface)] border-b border-[var(--border)] px-6 py-4 sticky top-0 z-10 shadow-2xs transition-colors">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-bold text-[var(--text-primary)]">📂 Source Guideline</h1>
-            <p className="text-xs text-[var(--text-secondary)]">Kelola link PDF panduan pengerjaan task annotasi</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <nav className="flex items-center gap-1 bg-[var(--bg-surface-alt)] p-1 rounded-xl text-xs font-semibold overflow-x-auto border border-[var(--border)]">
-              <Link href={ROUTES.OWNER_DASHBOARD} className="px-3 py-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Dashboard</Link>
-              <Link href={ROUTES.OWNER_PAYROLL} className="px-3 py-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Payroll</Link>
-              <Link href={ROUTES.OWNER_MASTER_DATA} className="px-3 py-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Master Data</Link>
-              <Link href={ROUTES.OWNER_USERS} className="px-3 py-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">User</Link>
-              <Link href={ROUTES.OWNER_ASSESSMENT} className="px-3 py-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Assessment</Link>
-              <Link href={ROUTES.OWNER_SOURCE} className="px-3 py-1.5 rounded-lg bg-[var(--primary-soft)] text-[var(--primary)] font-bold border border-[var(--primary)]/30">Source</Link>
-              <Link href={ROUTES.OWNER_SETTINGS} className="px-3 py-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">Settings</Link>
-            </nav>
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto px-6 pt-6 space-y-5">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 space-y-5">
         {/* Feedback */}
         {feedback && (
           <div className={`p-3.5 rounded-xl text-sm font-semibold border transition-all ${
@@ -545,9 +522,8 @@ export default function OwnerSourcePage() {
                 </div>
               );
             })}
-          </div>
-        )}
-      </main>
-    </div>
-  );
+            </div>
+          )}
+      </div>
+    );
 }

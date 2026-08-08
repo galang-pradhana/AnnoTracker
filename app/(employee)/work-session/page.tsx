@@ -256,62 +256,15 @@ export default function WorkSessionPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] pb-16 transition-colors duration-200">
-      {/* Top Sticky Header */}
-      <header className="sticky top-0 z-20 bg-[var(--bg-surface)]/90 backdrop-blur-md border-b border-[var(--border)] px-4 py-3 shadow-xs">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <AppLogo variant="icon" size="sm" />
-            <div>
-              <h1 className="text-sm font-bold text-[var(--text-primary)] leading-tight">
-                Catat Pekerjaan
-              </h1>
-              <p className="text-[11px] text-[var(--text-secondary)]">
-                {formattedDate || "Memuat tanggal..."}
-              </p>
-            </div>
-          </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+      {/* Sub-header tanggal */}
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-xs font-semibold text-[var(--text-secondary)]">
+          🗓 {formattedDate || "Memuat tanggal..."}
+        </p>
+      </div>
 
-          <div className="flex items-center gap-2">
-            <SyncBadge />
-            <Link
-              href={ROUTES.EMPLOYEE_HISTORY}
-              className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors hidden sm:inline-block"
-            >
-              📅 Riwayat
-            </Link>
-            <Link
-              href={ROUTES.EMPLOYEE_ASSESSMENT}
-              className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors hidden sm:inline-block"
-            >
-              🧪 Assessment
-            </Link>
-            <Link
-              href={ROUTES.EMPLOYEE_SOURCE}
-              className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors hidden sm:inline-block"
-            >
-              📂 Source
-            </Link>
-            <Link
-              href={ROUTES.EMPLOYEE_PROFILE}
-              className="text-xs text-[var(--text-secondary)] hover:text-[var(--primary)] font-semibold px-2 py-1 transition-colors hidden sm:inline-block"
-            >
-              👤 Profil
-            </Link>
-            <ThemeToggle />
-            <button
-              onClick={handleLogout}
-              className="text-xs text-[var(--text-secondary)] hover:text-[var(--danger)] font-medium px-2 py-1 transition-colors cursor-pointer"
-            >
-              Keluar
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Area - 3 Column Layout (Desktop) & Priority Mobile Stack */}
-      <main className="max-w-7xl mx-auto px-4 pt-6">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* KOLOM 1 (KIRI) - Ringkasan Hari Ini (~25% width / 3 cols) */}
           {/* Mobile Order: 3 */}
           <div className="lg:col-span-3 order-3 lg:order-1 space-y-6">
@@ -360,7 +313,6 @@ export default function WorkSessionPage() {
             />
           </div>
         </div>
-      </main>
     </div>
   );
 }
