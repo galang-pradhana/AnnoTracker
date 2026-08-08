@@ -112,12 +112,13 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "ID User dan nama lengkap wajib diisi." }, { status: 400 });
       }
 
-      // Build update payload dynamically so status-only updates don't wipe contact fields
+      // Build update payload dynamically so missing fields aren't wiped or set to undefined
       const updatePayload: Record<string, unknown> = {
+        id: userId,
         full_name: fullName.trim(),
-        role,
-        is_active: isActive,
       };
+      if (role !== undefined) updatePayload.role = role;
+      if (isActive !== undefined) updatePayload.is_active = isActive;
       if (phone !== undefined) updatePayload.phone = phone || null;
       if (bankName !== undefined) updatePayload.bank_name = bankName || null;
       if (bankAccountNumber !== undefined) updatePayload.bank_account_number = bankAccountNumber || null;
@@ -125,8 +126,7 @@ export async function POST(req: Request) {
 
       const { data: dbData, error: dbError } = await adminClient
         .from("users")
-        .update(updatePayload)
-        .eq("id", userId)
+        .upsert(updatePayload)
         .select()
         .single();
 
@@ -135,8 +135,11 @@ export async function POST(req: Request) {
       }
 
       // Also update auth.users metadata
+      const userMeta: Record<string, unknown> = { full_name: fullName.trim() };
+      if (role !== undefined) userMeta.role = role;
+
       await adminClient.auth.admin.updateUserById(userId, {
-        user_metadata: { full_name: fullName.trim(), role },
+        user_metadata: userMeta,
       });
 
       return NextResponse.json({ success: true, user: dbData });

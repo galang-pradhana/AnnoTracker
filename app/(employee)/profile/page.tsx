@@ -103,22 +103,31 @@ export default function EmployeeProfilePage() {
       const supabase = createClient();
       const { data: { user: authUser } } = await supabase.auth.getUser();
 
-      if (!authUser) return;
+      if (!authUser) {
+        setProfileMsg({ text: "Sesi telah berakhir. Silakan login kembali.", type: "error" });
+        return;
+      }
 
-      const updatePayload = {
-        full_name: fullName.trim(),
-        phone: phone.trim(),
-        bank_name: bankName,
-        bank_account_number: bankAccountNumber.trim(),
-        bank_account_holder: bankAccountHolder.trim() || fullName.trim(),
-      };
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update",
+          userId: authUser.id,
+          fullName: fullName.trim(),
+          phone: phone.trim() || null,
+          bankName: bankName,
+          bankAccountNumber: bankAccountNumber.trim() || null,
+          bankAccountHolder: bankAccountHolder.trim() || fullName.trim(),
+        }),
+      });
 
-      const { error } = await supabase
-        .from("users")
-        .update(updatePayload)
-        .eq("id", authUser.id);
+      const resData = await res.json();
+      if (!res.ok) throw new Error(resData.error || "Gagal menyimpan data profil");
 
-      if (error) throw error;
+      if (resData.user) {
+        setCurrentUser(resData.user);
+      }
 
       setProfileMsg({ text: "✅ Profil & Data Rekening berhasil diperbarui!", type: "success" });
       setTimeout(() => setProfileMsg(null), 4000);
