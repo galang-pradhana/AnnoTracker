@@ -43,7 +43,7 @@ export default function EmployeeSourcePage() {
       const supabase = createClient();
       const { data } = await supabase
         .from("source_guidelines")
-        .select("id, title, description, category, icon, drive_url, display_order")
+        .select("*")
         .eq("is_active", true)
         .order("display_order")
         .order("created_at");
@@ -73,23 +73,23 @@ export default function EmployeeSourcePage() {
 
         {/* Greeting Banner */}
         <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-[var(--primary)] to-[var(--primary-hover)] rounded-2xl text-white shadow-sm">
-          <div className="text-2xl">📚</div>
+          <span className="text-2xl shrink-0">📚</span>
           <div>
-            <p className="text-sm font-bold">Cek guideline sebelum mulai kerja!</p>
-            <p className="text-[11px] text-white/70 mt-0.5">Buka PDF panduan untuk memastikan kualitas anotasi sesuai standar.</p>
+            <p className="text-xs font-bold uppercase tracking-wider opacity-90">Cek guideline sebelum mulai kerja!</p>
+            <p className="text-[11px] opacity-80">Buka PDF panduan untuk memastikan kualitas anotasi sesuai standar.</p>
           </div>
         </div>
 
-        {/* Category Filter */}
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Category Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
           {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setActiveCategory(cat)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 activeCategory === cat
-                  ? "bg-[var(--primary)] text-white shadow-sm"
-                  : "bg-[var(--bg-surface)] border border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  ? 'bg-[var(--primary)] text-white shadow-xs'
+                  : 'bg-[var(--bg-surface-alt)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] border border-[var(--border)]'
               }`}
             >
               {cat}
@@ -97,71 +97,68 @@ export default function EmployeeSourcePage() {
           ))}
         </div>
 
-        {/* Cards */}
+        {/* Guideline List */}
         {isLoading ? (
-          <div className="py-16 text-center">
-            <div className="text-2xl mb-2 animate-pulse">📂</div>
-            <p className="text-sm text-[var(--text-secondary)]">Memuat guideline...</p>
-          </div>
+          <div className="py-12 text-center text-xs text-[var(--text-secondary)]">Memuat guideline...</div>
         ) : filtered.length === 0 ? (
-          <div className="py-16 text-center">
-            <p className="text-3xl mb-2">📭</p>
-            <p className="text-sm text-[var(--text-secondary)]">Belum ada guideline untuk kategori ini.</p>
-          </div>
+          <div className="py-12 text-center text-xs text-[var(--text-secondary)]">Belum ada guideline untuk kategori ini.</div>
         ) : (
           <div className="space-y-3">
-            {filtered.map((g) => (
-              <div
-                key={g.id}
-                className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)] p-4 flex flex-col gap-3 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 bg-[var(--primary-soft)] border border-[var(--primary)]/20">
-                    {g.icon}
+            {filtered.map((g) => {
+              const allLinks = getAllLinks(g);
+              return (
+                <div
+                  key={g.id}
+                  className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)] p-4 flex flex-col gap-3 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 bg-[var(--primary-soft)] border border-[var(--primary)]/20">
+                      {g.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-[var(--text-primary)] leading-tight">{g.title}</p>
+                      {g.description && (
+                        <p className="text-xs text-[var(--text-secondary)] mt-0.5 line-clamp-2">{g.description}</p>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--primary-soft)] text-[var(--primary)]">
+                      {g.category}
+                    </span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-[var(--text-primary)] leading-tight">{g.title}</p>
-                    {g.description && (
-                      <p className="text-xs text-[var(--text-secondary)] mt-0.5 line-clamp-2">{g.description}</p>
-                    )}
-                  </div>
-                  <span className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--primary-soft)] text-[var(--primary)]">
-                    {g.category}
-                  </span>
-                </div>
 
-                <div className="flex gap-2">
-                  {getAllLinks(g).map((lnk, idx) => {
-                    const copyKey = `${g.id}-${idx}`;
-                    return (
-                      <React.Fragment key={idx}>
-                        <a
-                          href={lnk.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white text-xs font-bold rounded-xl transition-colors overflow-hidden"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                          <span className="truncate">{lnk.label || `Link ${idx + 1}`}</span>
-                        </a>
-                        <button
-                          onClick={() => handleCopy(copyKey, lnk.url)}
-                          className={`px-2.5 py-2.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer shrink-0 ${
-                            copiedId === copyKey
-                              ? 'bg-[var(--accent-teal-soft)] border-[var(--accent-teal)]/30 text-[var(--accent-teal)]'
-                              : 'bg-[var(--bg-surface-alt)] border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                          }`}
-                        >
-                          {copiedId === copyKey ? '✓' : '📋'}
-                        </button>
-                      </React.Fragment>
-                    );
-                  })}
+                  <div className="space-y-2">
+                    {allLinks.map((lnk, idx) => {
+                      const copyKey = `${g.id}-${idx}`;
+                      return (
+                        <div key={idx} className="flex gap-2">
+                          <a
+                            href={lnk.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-white text-xs font-bold rounded-xl transition-colors overflow-hidden"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                            <span className="truncate">{lnk.label || `Buka Guideline ${idx + 1}`}</span>
+                          </a>
+                          <button
+                            onClick={() => handleCopy(copyKey, lnk.url)}
+                            className={`px-2.5 py-2.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer shrink-0 ${
+                              copiedId === copyKey
+                                ? 'bg-[var(--accent-teal-soft)] border-[var(--accent-teal)]/30 text-[var(--accent-teal)]'
+                                : 'bg-[var(--bg-surface-alt)] border-[var(--border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                            }`}
+                          >
+                            {copiedId === copyKey ? '✓' : '📋'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
     </div>
