@@ -388,6 +388,7 @@ export default function EmployeeAssessmentTakePage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [activeItem, setActiveItem] = useState(0);
   const [activeResponse, setActiveResponse] = useState<string>("A");
+  const [activePairTab, setActivePairTab] = useState<number>(0);
   const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -661,6 +662,7 @@ export default function EmployeeAssessmentTakePage() {
                   onClick={() => {
                     setActiveItem(idx);
                     setActiveResponse(responseLabels[0] || "A");
+                    setActivePairTab(0);
                   }}
                   className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                     idx === activeItem
@@ -824,14 +826,51 @@ export default function EmployeeAssessmentTakePage() {
                         </p>
                       </div>
 
-                      <div className="space-y-6">
-                        {comparisonPairs.map((pair) => {
-                          const currentVal = getQAns(answers, currentItem.id, "comparison", pair.id) as string | null;
-                          const leftSat = getSatisfyingRatingLabel(answers, questions, currentItem.id, pair.left);
-                          const rightSat = getSatisfyingRatingLabel(answers, questions, currentItem.id, pair.right);
+                      {/* Sub-tabs for Pairwise Comparison Pairs */}
+                      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-[var(--border)]">
+                        {comparisonPairs.map((p, idx) => {
+                          const isPairCompleted = task.task_type === "VCG"
+                            ? VCG_COMPARISON_QUESTIONS.every((vq) => !!getQAns(answers, currentItem.id, "comparison", `${p.id}_${vq.id}`))
+                            : !!getQAns(answers, currentItem.id, "comparison", p.id);
+                          const isTabActive = activePairTab === idx;
 
                           return (
-                            <div key={pair.id} className="p-4 rounded-2xl bg-[var(--bg-surface-alt)] border border-[var(--border)] space-y-3">
+                            <button
+                              key={p.id}
+                              onClick={() => setActivePairTab(idx)}
+                              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
+                                isTabActive
+                                  ? "bg-[var(--accent-teal)] text-white shadow-xs"
+                                  : "bg-[var(--bg-surface-alt)] border border-[var(--border)] text-[var(--text-primary)] hover:bg-[var(--primary-soft)]"
+                              }`}
+                            >
+                              <span>{p.left} vs {p.right}</span>
+                              {isPairCompleted && (
+                                <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                                  isTabActive
+                                    ? "bg-white/25 text-white"
+                                    : "bg-[var(--accent-teal-soft)] text-[var(--accent-teal)] border border-[var(--accent-teal)]/30"
+                                }`}>
+                                  ✓
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Active Pair Comparison Content */}
+                      {(() => {
+                        const pair = comparisonPairs[activePairTab] || comparisonPairs[0];
+                        if (!pair) return null;
+
+                        const currentVal = getQAns(answers, currentItem.id, "comparison", pair.id) as string | null;
+                        const leftSat = getSatisfyingRatingLabel(answers, questions, currentItem.id, pair.left);
+                        const rightSat = getSatisfyingRatingLabel(answers, questions, currentItem.id, pair.right);
+
+                        return (
+                          <div className="space-y-4">
+                            <div className="p-4 rounded-2xl bg-[var(--bg-surface-alt)] border border-[var(--border)] space-y-3">
                               <div className="flex items-center justify-between">
                                 <h4 className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-2">
                                   <span className="px-2 py-0.5 rounded bg-[var(--primary-soft)] text-[var(--primary)] font-mono text-[11px]">
@@ -960,9 +999,42 @@ export default function EmployeeAssessmentTakePage() {
                                 </div>
                               )}
                             </div>
-                          );
-                        })}
-                      </div>
+
+                            {/* Sub-tab Navigation Controls */}
+                            {comparisonPairs.length > 1 && (
+                              <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]">
+                                <button
+                                  type="button"
+                                  disabled={activePairTab === 0}
+                                  onClick={() => setActivePairTab((prev) => Math.max(0, prev - 1))}
+                                  className={`px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                                    activePairTab === 0
+                                      ? "opacity-40 cursor-not-allowed border-[var(--border)] text-[var(--text-secondary)]"
+                                      : "border-[var(--border)] bg-[var(--bg-surface-alt)] text-[var(--text-primary)] hover:bg-[var(--border)] cursor-pointer"
+                                  }`}
+                                >
+                                  ← Pasangan Sblmnya
+                                </button>
+                                <span className="text-[11px] text-[var(--text-secondary)] font-semibold">
+                                  Pasangan {activePairTab + 1} dari {comparisonPairs.length}
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={activePairTab === comparisonPairs.length - 1}
+                                  onClick={() => setActivePairTab((prev) => Math.min(comparisonPairs.length - 1, prev + 1))}
+                                  className={`px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all ${
+                                    activePairTab === comparisonPairs.length - 1
+                                      ? "opacity-40 cursor-not-allowed border-[var(--border)] text-[var(--text-secondary)]"
+                                      : "border-[var(--accent-teal)] bg-[var(--accent-teal-soft)] text-[var(--accent-teal)] hover:brightness-95 cursor-pointer"
+                                  }`}
+                                >
+                                  Pasangan Lanjut →
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
 
