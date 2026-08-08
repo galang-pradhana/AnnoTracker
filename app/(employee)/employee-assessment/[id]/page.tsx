@@ -467,61 +467,7 @@ export default function EmployeeAssessmentTakePage() {
   const progress = calcProgress();
 
   return (
-    <div className="min-h-screen bg-[var(--bg-base)] text-[var(--text-primary)] pb-16 transition-colors duration-200">
-      {/* Header */}
-      <header className="sticky top-0 z-10 bg-[var(--bg-surface)]/95 backdrop-blur-md border-b border-[var(--border)] px-4 py-3">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <Link
-              href={ROUTES.EMPLOYEE_ASSESSMENT}
-              className="hover:opacity-90 transition-opacity"
-            >
-              <AppLogo variant="icon" size="sm" />
-            </Link>
-            <div>
-              <h1 className="text-sm font-bold text-[var(--text-primary)] leading-tight">Pengerjaan Assessment</h1>
-              <p className="text-[11px] text-[var(--text-secondary)]">Task {task?.task_type || "PR"}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {saveStatus === "saving" && <span className="text-xs text-[var(--text-secondary)]">⏳ Menyimpan...</span>}
-            {saveStatus === "saved" && <span className="text-xs text-[var(--accent-teal)] font-semibold">✓ Draft tersimpan</span>}
-
-            {!submitted && (
-              <button
-                onClick={() => save(false)}
-                disabled={saving}
-                className="px-3 py-1.5 rounded-xl border border-[var(--border)] text-[var(--text-primary)] text-xs font-semibold hover:bg-[var(--bg-surface-alt)] transition-colors cursor-pointer"
-              >
-                💾 Draft
-              </button>
-            )}
-
-            {submitted ? (
-              <span className="px-3.5 py-1.5 rounded-xl bg-[var(--accent-teal-soft)] border border-[var(--accent-teal)]/40 text-[var(--accent-teal)] text-xs font-bold">
-                ✅ Completed
-              </span>
-            ) : (
-              <button
-                onClick={handleSubmit}
-                disabled={saving || !isComplete()}
-                className={`px-4 py-1.5 rounded-xl text-xs font-bold text-white shadow-xs transition-all ${
-                  isComplete()
-                    ? "bg-[var(--primary)] hover:bg-[var(--primary-hover)] cursor-pointer"
-                    : "bg-[var(--border)] text-[var(--text-secondary)] cursor-not-allowed"
-                }`}
-              >
-                📤 Submit
-              </button>
-            )}
-
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-6xl mx-auto px-4 pt-6 space-y-6">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
         {loading ? (
           <div className="py-16 text-center text-xs text-[var(--text-secondary)]">
             <div className="text-2xl mb-2 animate-bounce">⏳</div>
@@ -537,6 +483,49 @@ export default function EmployeeAssessmentTakePage() {
           </div>
         ) : (
           <>
+            {/* Top Action Toolbar */}
+            <div className="flex items-center justify-between gap-3 bg-[var(--bg-surface)] p-3.5 px-5 rounded-2xl border border-[var(--border)] shadow-xs">
+              <Link
+                href={ROUTES.EMPLOYEE_ASSESSMENT}
+                className="flex items-center gap-1.5 text-xs font-bold text-[var(--text-secondary)] hover:text-[var(--primary)] transition-colors"
+              >
+                <span>←</span>
+                <span>Daftar Assessment</span>
+              </Link>
+
+              <div className="flex items-center gap-2.5">
+                {saveStatus === "saving" && <span className="text-xs text-[var(--text-secondary)]">⏳ Menyimpan...</span>}
+                {saveStatus === "saved" && <span className="text-xs text-[var(--accent-teal)] font-semibold">✓ Draft tersimpan</span>}
+
+                {!submitted && (
+                  <button
+                    onClick={() => save(false)}
+                    disabled={saving}
+                    className="px-3.5 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface-alt)] text-[var(--text-primary)] text-xs font-bold hover:bg-[var(--border)] transition-colors cursor-pointer"
+                  >
+                    💾 Simpan Draft
+                  </button>
+                )}
+
+                {submitted ? (
+                  <span className="px-4 py-1.5 rounded-xl bg-[var(--accent-teal-soft)] border border-[var(--accent-teal)]/40 text-[var(--accent-teal)] text-xs font-extrabold">
+                    ✅ Completed
+                  </span>
+                ) : (
+                  <button
+                    onClick={handleSubmit}
+                    disabled={saving || !isComplete()}
+                    className={`px-4 py-1.5 rounded-xl text-xs font-extrabold text-white shadow-xs transition-all ${
+                      isComplete()
+                        ? "bg-[var(--primary)] hover:bg-[var(--primary-hover)] cursor-pointer"
+                        : "bg-[var(--border)] text-[var(--text-secondary)] cursor-not-allowed"
+                    }`}
+                  >
+                    📤 Submit Final
+                  </button>
+                )}
+              </div>
+            </div>
             {/* Title & Progress */}
             <div className="bg-[var(--bg-surface)] rounded-3xl p-6 border border-[var(--border)] shadow-xs space-y-3">
               <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -919,7 +908,6 @@ export default function EmployeeAssessmentTakePage() {
             </div>
           </>
         )}
-      </main>
     </div>
   );
 }
