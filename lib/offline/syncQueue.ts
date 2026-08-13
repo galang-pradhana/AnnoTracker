@@ -39,11 +39,17 @@ export async function markSyncFailure(
 ): Promise<void> {
   const item = await localDB.sync_queue.get(queueItemId);
   if (item) {
-    await localDB.sync_queue.update(queueItemId, {
-      status: "failed",
-      retry_count: item.retry_count + 1,
-      error_message: errorMsg,
-    });
+    const newRetryCount = item.retry_count + 1;
+    if (newRetryCount >= 5) {
+      // Discard stale un-syncable item after 5 retries to avoid permanent blocking badge
+      await localDB.sync_queue.delete(queueItemId);
+    } else {
+      await localDB.sync_queue.update(queueItemId, {
+        status: "failed",
+        retry_count: newRetryCount,
+        error_message: errorMsg,
+      });
+    }
   }
 }
 

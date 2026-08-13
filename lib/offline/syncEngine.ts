@@ -204,6 +204,33 @@ export async function processSyncQueue(): Promise<{
             } else if (!realTaskTypes.some((t) => t.id === rawTaskId) && realTaskTypes.length > 0) {
               payload.task_type_id = realTaskTypes[0].id;
             }
+
+            // Ensure parent session_id exists in Supabase work_sessions before inserting task_entry
+            if (payload.session_id && isValidUUID(String(payload.session_id)) && user?.id) {
+              const currentSessionIdToVerify = String(payload.session_id);
+              const { data: existingSess } = await supabase
+                .from("work_sessions")
+                .select("id")
+                .eq("id", currentSessionIdToVerify)
+                .maybeSingle();
+
+              if (!existingSess) {
+                const todayStr = new Date().toISOString().split("T")[0];
+                await supabase.from("work_sessions").upsert(
+                  {
+                    id: currentSessionIdToVerify,
+                    user_id: user.id,
+                    session_date: todayStr,
+                    proof_type: null,
+                    proof_url: null,
+                    proof_note: null,
+                    sync_status: "synced",
+                    created_at: new Date().toISOString(),
+                  },
+                  { onConflict: "id" }
+                );
+              }
+            }
           }
 
           // Filter payload to only retain columns that exist in standard Supabase schema
