@@ -206,9 +206,40 @@ export async function processSyncQueue(): Promise<{
             }
           }
 
+          // Filter payload to only retain columns that exist in standard Supabase schema
+          const workSessionColumns = new Set([
+            "id",
+            "user_id",
+            "session_date",
+            "proof_type",
+            "proof_url",
+            "proof_note",
+            "sync_status",
+            "created_at",
+          ]);
+          const taskEntryColumns = new Set([
+            "id",
+            "session_id",
+            "client_account_id",
+            "task_type_id",
+            "duration_seconds",
+            "entry_order",
+            "created_at",
+          ]);
+
+          const allowedColumns =
+            item.table_name === "work_sessions" ? workSessionColumns : taskEntryColumns;
+
+          const cleanPayload: Record<string, unknown> = {};
+          for (const key of Object.keys(payload)) {
+            if (allowedColumns.has(key)) {
+              cleanPayload[key] = payload[key];
+            }
+          }
+
           let { error } = await supabase
             .from(item.table_name)
-            .upsert(payload, { onConflict: "id" });
+            .upsert(cleanPayload, { onConflict: "id" });
 
           // If duplicate unique_user_session_date, fetch existing session id and update local cache
           if (error && item.table_name === "work_sessions" && error.message.includes("unique_user_session_date")) {
