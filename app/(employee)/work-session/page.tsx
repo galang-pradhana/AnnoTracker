@@ -274,6 +274,7 @@ export default function WorkSessionPage() {
               salaryTiers={salaryTiers}
               overrideRate={userOverrideRate}
               targetHours={8}
+              entriesWithDetails={entriesWithDetails}
             />
           </div>
 

@@ -1,9 +1,17 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { formatDecimalHours, formatSecondsToTime, formatRupiah } from "@/lib/utils";
 import { DEFAULT_SALARY_TIERS } from "@/constants";
-import type { SalaryTier } from "@/types";
+import type { SalaryTier, TaskEntryWithDetails } from "@/types";
+
+interface AccountBreakdown {
+  clientId: string;
+  clientName: string;
+  clientLanguage?: string | null;
+  totalSeconds: number;
+  taskCount: number;
+}
 
 interface SessionSummaryProps {
   totalSeconds: number;
@@ -11,6 +19,7 @@ interface SessionSummaryProps {
   salaryTiers?: SalaryTier[];
   overrideRate?: number;
   targetHours?: number; // default 8 hours
+  entriesWithDetails?: TaskEntryWithDetails[];
 }
 
 export function SessionSummary({
@@ -19,7 +28,10 @@ export function SessionSummary({
   salaryTiers,
   overrideRate,
   targetHours = 8,
+  entriesWithDetails = [],
 }: SessionSummaryProps) {
+  const [isBreakdownExpanded, setIsBreakdownExpanded] = useState(true);
+
   const totalHours = totalSeconds / 3600;
   const activeTiers = salaryTiers && salaryTiers.length > 0 ? salaryTiers : DEFAULT_SALARY_TIERS;
 
@@ -46,6 +58,29 @@ export function SessionSummary({
 
   // Average per task
   const avgSecondsPerTask = totalTaskCount > 0 ? Math.round(totalSeconds / totalTaskCount) : 0;
+
+  // ── Breakdown per akun ─────────────────────────────────────────────────
+  const accountBreakdowns: AccountBreakdown[] = (() => {
+    const map = new Map<string, AccountBreakdown>();
+    for (const entry of entriesWithDetails) {
+      if (!entry.client_account) continue;
+      const key = entry.client_account_id;
+      const existing = map.get(key);
+      if (existing) {
+        existing.totalSeconds += entry.duration_seconds || 0;
+        existing.taskCount += 1;
+      } else {
+        map.set(key, {
+          clientId: key,
+          clientName: entry.client_account.name,
+          clientLanguage: entry.client_account.language,
+          totalSeconds: entry.duration_seconds || 0,
+          taskCount: 1,
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.totalSeconds - a.totalSeconds);
+  })();
 
   return (
     <div className="bg-[var(--bg-surface)] text-[var(--text-primary)] rounded-2xl p-5 border border-[var(--border)] shadow-xs space-y-4">
@@ -133,6 +168,57 @@ export function SessionSummary({
           <span className="text-xs text-[var(--text-primary)] font-medium">Flat per tier</span>
         </div>
       </div>
+
+      {/* ── Breakdown per Akun ────────────────────────────────────────────── */}
+      {accountBreakdowns.length > 0 && (
+        <div className="pt-2 border-t border-[var(--border)]">
+          <button
+            type="button"
+            onClick={() => setIsBreakdownExpanded((v) => !v)}
+            className="w-full flex items-center justify-between mb-2 cursor-pointer group"
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-secondary)]">
+                🏢 Breakdown per Akun
+              </span>
+              <span className="text-[10px] font-bold text-[var(--primary)] bg-[var(--primary-soft)] px-1.5 py-0.5 rounded-full">
+                {accountBreakdowns.length}
+              </span>
+            </div>
+            <span className="text-[10px] text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">
+              {isBreakdownExpanded ? "▲" : "▼"}
+            </span>
+          </button>
+
+          {isBreakdownExpanded && (
+            <div className="space-y-1.5">
+              {accountBreakdowns.map((acc) => (
+                <div
+                  key={acc.clientId}
+                  className="flex items-center justify-between py-1.5 px-2.5 bg-[var(--bg-surface-alt)] rounded-lg border border-[var(--border)]"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-bold text-[var(--text-primary)] truncate">
+                      {acc.clientName}
+                      {acc.clientLanguage && (
+                        <span className="ml-1 text-[var(--text-secondary)] font-normal">
+                          ({acc.clientLanguage})
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-[10px] text-[var(--text-secondary)]">
+                      {acc.taskCount} task
+                    </p>
+                  </div>
+                  <span className="text-[11px] font-extrabold text-[var(--accent-teal)] ml-2 shrink-0">
+                    {formatDecimalHours(acc.totalSeconds / 3600)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

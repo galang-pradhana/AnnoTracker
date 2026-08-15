@@ -67,6 +67,8 @@ export default function EmployeeHistoryPage() {
 
   // State untuk collapsible bonus breakdown
   const [isBonusExpanded, setIsBonusExpanded] = useState(false);
+  // State untuk collapsed groups di modal detail
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const fetchHistory = useCallback(async (year: number, month: number) => {
     setIsLoading(true);
@@ -295,7 +297,7 @@ export default function EmployeeHistoryPage() {
                 return (
                   <button
                     key={dateStr}
-                    onClick={() => hasData && setSelectedDay({ session: session!, totalSeconds: daySeconds })}
+                    onClick={() => { if (hasData) { setCollapsedGroups(new Set()); setSelectedDay({ session: session!, totalSeconds: daySeconds }); } }}
                     disabled={!hasData}
                     className={`
                       h-16 flex flex-col items-center justify-between py-2 border-b border-r border-[var(--border)]/40 transition-all relative
@@ -457,20 +459,104 @@ export default function EmployeeHistoryPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                {(selectedDay.session.task_entries || []).map((entry, idx) => (
-                  <div key={entry.id || idx} className="flex items-center justify-between p-3 bg-[var(--bg-surface-alt)]/60 rounded-xl border border-[var(--border)]">
-                    <div>
-                      <p className="text-sm font-semibold text-[var(--text-primary)]">
-                        {entry.client_account?.name || "—"}
-                      </p>
-                      <p className="text-xs text-[var(--text-secondary)]">{entry.task_type?.name || "—"}</p>
-                    </div>
-                    <span className="text-sm font-bold text-[var(--primary)]">
-                      {formatDecimalHours((entry.duration_seconds || 0) / 3600)}
-                    </span>
-                  </div>
-                ))}
+              {/* ── Grouped per Akun ─────────────────────────────────────── */}
+              <div className="space-y-3">
+                {(() => {
+                  // Build groups
+                  const groupMap = new Map<string, {
+                    clientId: string;
+                    clientName: string;
+                    clientLanguage?: string | null;
+                    totalSeconds: number;
+                    entries: typeof selectedDay.session.task_entries;
+                  }>();
+                  for (const entry of (selectedDay.session.task_entries || [])) {
+                    const key = entry.client_account_id || "unknown";
+                    const existing = groupMap.get(key);
+                    if (existing) {
+                      existing.totalSeconds += entry.duration_seconds || 0;
+                      existing.entries.push(entry);
+                    } else {
+                      groupMap.set(key, {
+                        clientId: key,
+                        clientName: entry.client_account?.name || "—",
+                        clientLanguage: entry.client_account?.language,
+                        totalSeconds: entry.duration_seconds || 0,
+                        entries: [entry],
+                      });
+                    }
+                  }
+                  const groups = Array.from(groupMap.values()).sort((a, b) => b.totalSeconds - a.totalSeconds);
+
+                  return groups.map((grp) => {
+                    const isCollapsed = collapsedGroups.has(grp.clientId);
+                    // Default: collapsed jika task > 5
+                    const defaultCollapsed = grp.entries.length > 5;
+                    const showEntries = defaultCollapsed ? !isCollapsed : !collapsedGroups.has(grp.clientId + "_override");
+
+                    const toggleGroup = () => {
+                      setCollapsedGroups(prev => {
+                        const next = new Set(prev);
+                        if (defaultCollapsed) {
+                          if (next.has(grp.clientId)) next.delete(grp.clientId);
+                          else next.add(grp.clientId);
+                        } else {
+                          const key = grp.clientId + "_override";
+                          if (next.has(key)) next.delete(key);
+                          else next.add(key);
+                        }
+                        return next;
+                      });
+                    };
+
+                    return (
+                      <div key={grp.clientId} className="border border-[var(--border)] rounded-xl overflow-hidden">
+                        {/* Group Header */}
+                        <button
+                          type="button"
+                          onClick={toggleGroup}
+                          className="w-full flex items-center justify-between px-3.5 py-2.5 bg-[var(--bg-surface-alt)] hover:bg-[var(--bg-surface-alt)]/80 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2 text-left">
+                            <span className="text-sm">{showEntries ? "▾" : "▸"}</span>
+                            <div>
+                              <p className="text-xs font-bold text-[var(--text-primary)]">
+                                {grp.clientName}
+                                {grp.clientLanguage && (
+                                  <span className="ml-1 font-normal text-[var(--text-secondary)]">
+                                    ({grp.clientLanguage})
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-[10px] text-[var(--text-secondary)]">
+                                {grp.entries.length} task
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-sm font-extrabold text-[var(--primary)] shrink-0 ml-2">
+                            {formatDecimalHours(grp.totalSeconds / 3600)}
+                          </span>
+                        </button>
+
+                        {/* Group Entries */}
+                        {showEntries && (
+                          <div className="divide-y divide-[var(--border)]">
+                            {grp.entries.map((entry, eIdx) => (
+                              <div key={entry.id || eIdx} className="flex items-center justify-between px-4 py-2 bg-[var(--bg-surface)]/60">
+                                <p className="text-xs text-[var(--text-secondary)] truncate flex-1">
+                                  {entry.task_type?.name || "—"}
+                                </p>
+                                <span className="text-xs font-semibold text-[var(--text-primary)] ml-3 shrink-0">
+                                  {formatDecimalHours((entry.duration_seconds || 0) / 3600)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
 
               {selectedDay.session.proof_note && (

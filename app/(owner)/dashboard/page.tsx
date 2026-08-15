@@ -139,6 +139,14 @@ export default function OwnerDashboardPage() {
   const [calMonth, setCalMonth] = useState(currentMonth);
   const [selectedCalendarDay, setSelectedCalendarDay] = useState<{ date: string; data: CalendarDayData } | null>(null);
 
+  // Account tab state — filter periode & side panel drill-down
+  const [accountPeriod, setAccountPeriod] = useState<"today" | "week" | "month">("month");
+  const [selectedAccountDrill, setSelectedAccountDrill] = useState<AccountStats | null>(null);
+
+  // Dashboard calendar modal grouping state
+  const [calDashGroupMode, setCalDashGroupMode] = useState<"account" | "employee">("account");
+  const [collapsedDashCalGroups, setCollapsedDashCalGroups] = useState<Set<string>>(new Set());
+
   // ── Get current payroll period (15th→14th) ─────────────────────────────────
   const currentPayrollPeriod = useMemo(() => {
     const today = new Date();
@@ -277,6 +285,88 @@ export default function OwnerDashboardPage() {
       .map((a) => ({ ...a, totalHours: a.totalSeconds / 3600 }))
       .sort((a, b) => b.totalSeconds - a.totalSeconds);
   }, [monthSessions]);
+
+  // ── Derived: Filtered Account Stats (berdasarkan accountPeriod) ───────────
+  const filteredAccountStats: (AccountStats & { taskCount: number })[] = useMemo(() => {
+    const now = new Date();
+    const todayISO = now.toISOString().split("T")[0];
+
+    // Hitung start of week (Monday)
+    const dowToday = now.getDay();
+    const diffToMon = dowToday === 0 ? -6 : 1 - dowToday;
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() + diffToMon);
+    const weekStartISO = weekStart.toISOString().split("T")[0];
+
+    const filtered = monthSessions.filter(s => {
+      if (accountPeriod === "today") return s.session_date === todayISO;
+      if (accountPeriod === "week") return s.session_date >= weekStartISO && s.session_date <= todayISO;
+      return true; // "month"
+    });
+
+    const accountMap = new Map<string, AccountStats & { taskCount: number }>();
+    filtered.forEach((s) => {
+      (s.task_entries || []).forEach((e) => {
+        if (!e.client_account) return;
+        const key = e.client_account_id;
+        const existing = accountMap.get(key);
+        if (existing) {
+          existing.totalSeconds += (e.duration_seconds || 0);
+          existing.employeeSet.add(s.user_id);
+          existing.taskCount += 1;
+        } else {
+          accountMap.set(key, {
+            account: e.client_account,
+            totalSeconds: (e.duration_seconds || 0),
+            totalHours: 0,
+            employeeSet: new Set([s.user_id]),
+            taskCount: 1,
+          });
+        }
+      });
+    });
+    return Array.from(accountMap.values())
+      .map((a) => ({ ...a, totalHours: a.totalSeconds / 3600 }))
+      .sort((a, b) => b.totalSeconds - a.totalSeconds);
+  }, [monthSessions, accountPeriod]);
+
+  // ── Helper: employee breakdown untuk akun tertentu, per filter aktif ────────
+  const getAccountEmployeeBreakdown = (acc: AccountStats) => {
+    const now = new Date();
+    const todayISO = now.toISOString().split("T")[0];
+    const dowToday = now.getDay();
+    const diffToMon = dowToday === 0 ? -6 : 1 - dowToday;
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() + diffToMon);
+    const weekStartISO = weekStart.toISOString().split("T")[0];
+
+    const filtered = monthSessions.filter(s => {
+      if (accountPeriod === "today") return s.session_date === todayISO;
+      if (accountPeriod === "week") return s.session_date >= weekStartISO && s.session_date <= todayISO;
+      return true;
+    });
+
+    const empMap = new Map<string, { name: string; seconds: number; taskCount: number }>();
+    filtered.forEach(s => {
+      (s.task_entries || []).forEach(e => {
+        if (e.client_account_id !== acc.account.id) return;
+        const existing = empMap.get(s.user_id);
+        if (existing) {
+          existing.seconds += e.duration_seconds || 0;
+          existing.taskCount += 1;
+        } else {
+          empMap.set(s.user_id, {
+            name: s.user?.full_name || "Karyawan",
+            seconds: e.duration_seconds || 0,
+            taskCount: 1,
+          });
+        }
+      });
+    });
+    return Array.from(empMap.values()).sort((a, b) => b.seconds - a.seconds);
+  };
+
+
 
   // ── Derived: Task Type Stats ───────────────────────────────────────────────
   const taskTypeStats: TaskTypeStats[] = useMemo(() => {
@@ -859,43 +949,188 @@ export default function OwnerDashboardPage() {
             TAB: PER AKUN KLIEN
         ══════════════════════════════════════════════════════════════════════ */}
         {activeTab === "account" && (
-          <div className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)] shadow-xs overflow-hidden">
-            <div className="px-6 py-4 border-b border-[var(--border)]">
-              <h2 className="text-sm font-bold text-[var(--text-primary)]">Total Jam per Akun Klien</h2>
-              <p className="text-[11px] text-[var(--text-secondary)]">Bulan ini · semua karyawan · diurutkan terbanyak</p>
-            </div>
-            {isLoading ? (
-              <div className="py-12 text-center text-xs text-[var(--text-secondary)]">Memuat data...</div>
-            ) : accountStats.length === 0 ? (
-              <EmptyState
-                icon="🏢"
-                title="Belum Ada Akun Klien"
-                description="Belum ada pengerjaan task untuk akun klien bulan ini."
-              />
-            ) : (
-              <div className="p-6 space-y-4">
-                {accountStats.map((acc) => {
-                  const pct = totalTeamHours > 0 ? (acc.totalHours / totalTeamHours) * 100 : 0;
-                  return (
-                    <div key={acc.account.id} className="space-y-2.5 p-4 bg-[var(--bg-surface-alt)] rounded-xl border border-[var(--border)]">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-bold text-[var(--text-primary)]">{acc.account.name}</p>
-                          <p className="text-[11px] text-[var(--text-secondary)]">
-                            Dikerjakan oleh {acc.employeeSet.size} karyawan
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xl font-bold text-[var(--accent-teal)]">{formatDecimalHours(acc.totalHours)}</p>
-                          <p className="text-[11px] text-[var(--text-secondary)]">{pct.toFixed(1)}% dari total</p>
-                        </div>
-                      </div>
-                      <MiniBar value={acc.totalHours} max={maxAccountHours} color="bg-[var(--accent-teal)]" />
-                    </div>
-                  );
-                })}
+          <div className="relative">
+            <div className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)] shadow-xs overflow-hidden">
+              {/* Header + Filter Periode */}
+              <div className="px-6 py-4 border-b border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-bold text-[var(--text-primary)]">Total Jam per Akun Klien</h2>
+                  <p className="text-[11px] text-[var(--text-secondary)]">
+                    Klik baris untuk lihat detail per karyawan
+                  </p>
+                </div>
+                {/* Periode toggle */}
+                <div className="flex gap-1 p-1 bg-[var(--bg-surface-alt)] rounded-xl border border-[var(--border)]">
+                  {(["today", "week", "month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setAccountPeriod(p)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        accountPeriod === p
+                          ? "bg-[var(--primary)] text-white shadow-sm"
+                          : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      }`}
+                    >
+                      {p === "today" ? "Hari Ini" : p === "week" ? "Minggu Ini" : "Bulan Ini"}
+                    </button>
+                  ))}
+                </div>
               </div>
-            )}
+
+              {isLoading ? (
+                <div className="py-12 text-center text-xs text-[var(--text-secondary)]">Memuat data...</div>
+              ) : filteredAccountStats.length === 0 ? (
+                <EmptyState
+                  icon="🏢"
+                  title="Belum Ada Akun Klien"
+                  description={`Belum ada pengerjaan task untuk akun klien ${accountPeriod === "today" ? "hari ini" : accountPeriod === "week" ? "minggu ini" : "bulan ini"}.`}
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-[var(--bg-surface-alt)] border-b border-[var(--border)]">
+                      <tr className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                        <th className="px-6 py-3">Akun / Klien</th>
+                        <th className="px-4 py-3">Total Jam</th>
+                        <th className="px-4 py-3">Total Task</th>
+                        <th className="px-4 py-3">Employee Terlibat</th>
+                        <th className="px-4 py-3">% dari Total Tim</th>
+                        <th className="px-4 py-3"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border)]">
+                      {filteredAccountStats.map((acc) => {
+                        const totalFiltered = filteredAccountStats.reduce((s, a) => s + a.totalHours, 0);
+                        const pct = totalFiltered > 0 ? (acc.totalHours / totalFiltered) * 100 : 0;
+                        const isSelected = selectedAccountDrill?.account.id === acc.account.id;
+                        return (
+                          <tr
+                            key={acc.account.id}
+                            onClick={() => setSelectedAccountDrill(isSelected ? null : acc)}
+                            className={`cursor-pointer transition-colors ${
+                              isSelected
+                                ? "bg-[var(--primary-soft)] border-l-2 border-[var(--primary)]"
+                                : "hover:bg-[var(--bg-surface-alt)]/50"
+                            }`}
+                          >
+                            <td className="px-6 py-4">
+                              <p className="font-bold text-[var(--text-primary)]">{acc.account.name}</p>
+                              {acc.account.language && (
+                                <p className="text-[11px] text-[var(--text-secondary)]">{acc.account.language}</p>
+                              )}
+                            </td>
+                            <td className="px-4 py-4">
+                              <p className="font-bold text-[var(--accent-teal)] text-base">{formatDecimalHours(acc.totalHours)}</p>
+                            </td>
+                            <td className="px-4 py-4">
+                              <p className="font-semibold text-[var(--text-primary)]">{acc.taskCount}</p>
+                              <p className="text-[10px] text-[var(--text-secondary)]">entri</p>
+                            </td>
+                            <td className="px-4 py-4">
+                              <p className="font-semibold text-[var(--text-primary)]">{acc.employeeSet.size}</p>
+                              <p className="text-[10px] text-[var(--text-secondary)]">karyawan</p>
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="space-y-1">
+                                <p className="text-xs font-bold text-[var(--text-primary)]">{pct.toFixed(1)}%</p>
+                                <MiniBar value={acc.totalHours} max={filteredAccountStats[0]?.totalHours ?? 1} color="bg-[var(--accent-teal)]" />
+                              </div>
+                            </td>
+                            <td className="px-4 py-4">
+                              <span className="text-xs font-bold text-[var(--primary)]">
+                                {isSelected ? "✕ Tutup" : "Detail →"}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* ── Side Panel Drill-down ─────────────────────────────────────── */}
+            {selectedAccountDrill && (() => {
+              const empBreakdown = getAccountEmployeeBreakdown(selectedAccountDrill);
+              const totalAccSecs = empBreakdown.reduce((s, e) => s + e.seconds, 0);
+              return (
+                <div className="mt-4 bg-[var(--bg-surface)] rounded-2xl border border-[var(--primary)]/30 shadow-md overflow-hidden animate-in slide-in-from-bottom-2 duration-200">
+                  {/* Panel Header */}
+                  <div className="px-6 py-4 border-b border-[var(--border)] bg-[var(--primary-soft)] flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-[var(--primary)]">
+                        🏢 {selectedAccountDrill.account.name}
+                        {selectedAccountDrill.account.language && (
+                          <span className="ml-1.5 font-normal text-[var(--text-secondary)] text-xs">
+                            ({selectedAccountDrill.account.language})
+                          </span>
+                        )}
+                      </h3>
+                      <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                        Breakdown per karyawan ·{" "}
+                        {accountPeriod === "today" ? "Hari Ini" : accountPeriod === "week" ? "Minggu Ini" : "Bulan Ini"}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedAccountDrill(null)}
+                      className="w-7 h-7 rounded-full bg-[var(--bg-surface)] border border-[var(--border)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Panel Body */}
+                  {empBreakdown.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-[var(--text-secondary)]">Belum ada data pada periode ini.</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                        <thead className="bg-[var(--bg-surface-alt)] border-b border-[var(--border)]">
+                          <tr className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                            <th className="px-6 py-3">Karyawan</th>
+                            <th className="px-4 py-3">Total Jam</th>
+                            <th className="px-4 py-3">Total Task</th>
+                            <th className="px-4 py-3">% dari Akun</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--border)]">
+                          {empBreakdown.map((emp, idx) => {
+                            const pct = totalAccSecs > 0 ? (emp.seconds / totalAccSecs) * 100 : 0;
+                            return (
+                              <tr key={emp.name + idx} className="hover:bg-[var(--bg-surface-alt)]/50 transition-colors">
+                                <td className="px-6 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                      idx === 0 ? "bg-[var(--primary-soft)] text-[var(--primary)]" :
+                                      idx === 1 ? "bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]" :
+                                      "bg-[var(--bg-surface-alt)] text-[var(--text-secondary)]"
+                                    }`}>{idx + 1}</span>
+                                    <p className="font-semibold text-[var(--text-primary)]">{emp.name}</p>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <p className="font-bold text-[var(--primary)]">{formatDecimalHours(emp.seconds / 3600)}</p>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <p className="font-semibold text-[var(--text-primary)]">{emp.taskCount}</p>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <div className="space-y-1">
+                                    <p className="text-xs font-bold">{pct.toFixed(1)}%</p>
+                                    <MiniBar value={emp.seconds} max={empBreakdown[0]?.seconds ?? 1} color="bg-[var(--primary)]" />
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -1040,6 +1275,7 @@ export default function OwnerDashboardPage() {
           </div>
         )}
 
+
       {/* Day Detail Modal for Calendar Tab */}
       {selectedCalendarDay && (
         <div
@@ -1047,56 +1283,171 @@ export default function OwnerDashboardPage() {
           onClick={() => setSelectedCalendarDay(null)}
         >
           <div
-            className="w-full sm:max-w-lg bg-white dark:bg-slate-800 rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl max-h-[80vh] overflow-y-auto"
+            className="w-full sm:max-w-lg bg-[var(--bg-surface)] rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-10 h-1 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-4 sm:hidden" />
+            <div className="w-10 h-1 bg-[var(--border)] rounded-full mx-auto mb-4 sm:hidden" />
 
-            <div className="flex items-start justify-between mb-5">
+            <div className="flex items-start justify-between mb-4">
               <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                <h3 className="text-base font-bold text-[var(--text-primary)]">
                   {new Date(selectedCalendarDay.date + "T00:00:00").toLocaleDateString("id-ID", {
                     weekday: "long", day: "numeric", month: "long", year: "numeric"
                   })}
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  <span className="font-bold text-teal-600 dark:text-teal-400">{formatDecimalHours(selectedCalendarDay.data.totalSeconds / 3600)}</span>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  <span className="font-bold text-[var(--accent-teal)]">{formatDecimalHours(selectedCalendarDay.data.totalSeconds / 3600)}</span>
                   {" total · "}
                   {selectedCalendarDay.data.employeeCount} karyawan aktif
                 </p>
               </div>
               <button
                 onClick={() => setSelectedCalendarDay(null)}
-                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-300 hover:bg-slate-200 text-xs shrink-0"
+                className="w-7 h-7 rounded-full bg-[var(--bg-surface-alt)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs shrink-0 cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-3">
-              {selectedCalendarDay.data.sessions.map((session, idx) => {
-                const sessSecs = (session.task_entries || []).reduce((sum, e) => sum + (e.duration_seconds || 0), 0);
-                return (
-                  <div key={session.id || idx} className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-bold text-slate-900 dark:text-white">
-                        {session.user?.full_name || "Karyawan"}
-                      </p>
-                      <span className="text-sm font-bold text-teal-700 dark:text-teal-400">
-                        {formatDecimalHours(sessSecs / 3600)}
-                      </span>
-                    </div>
-                    <div className="space-y-1">
-                      {(session.task_entries || []).map((entry, eIdx) => (
-                        <div key={entry.id || eIdx} className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-300">
-                          <span>{entry.client_account?.name || "—"} · {entry.task_type?.name || "—"}</span>
-                          <span className="font-medium text-slate-700 dark:text-slate-200">{formatDecimalHours((entry.duration_seconds || 0) / 3600)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+            {/* Toggle Mode */}
+            <div className="flex gap-1 p-1 bg-[var(--bg-surface-alt)] rounded-xl mb-4 border border-[var(--border)]">
+              {(["account", "employee"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => { setCalDashGroupMode(mode); setCollapsedDashCalGroups(new Set()); }}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    calDashGroupMode === mode
+                      ? "bg-[var(--primary)] text-white shadow-sm"
+                      : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  }`}
+                >
+                  {mode === "account" ? "🏢 Per Akun" : "👤 Per Karyawan"}
+                </button>
+              ))}
+            </div>
+
+            {/* Grouped Content */}
+            <div className="space-y-2">
+              {(() => {
+                const allEntries = selectedCalendarDay.data.sessions.flatMap(s =>
+                  (s.task_entries || []).map(e => ({ ...e, session: s }))
                 );
-              })}
+
+                if (calDashGroupMode === "account") {
+                  const groupMap = new Map<string, {
+                    clientId: string; clientName: string; clientLanguage?: string | null;
+                    totalSeconds: number; taskCount: number;
+                    employeeSubs: Map<string, { name: string; seconds: number; taskCount: number }>;
+                  }>();
+                  for (const entry of allEntries) {
+                    const key = entry.client_account_id || "unknown";
+                    const empId = entry.session.user_id;
+                    const empName = entry.session.user?.full_name || "Karyawan";
+                    const existing = groupMap.get(key);
+                    if (existing) {
+                      existing.totalSeconds += entry.duration_seconds || 0;
+                      existing.taskCount += 1;
+                      const empSub = existing.employeeSubs.get(empId);
+                      if (empSub) { empSub.seconds += entry.duration_seconds || 0; empSub.taskCount += 1; }
+                      else existing.employeeSubs.set(empId, { name: empName, seconds: entry.duration_seconds || 0, taskCount: 1 });
+                    } else {
+                      const empSubs = new Map<string, { name: string; seconds: number; taskCount: number }>();
+                      empSubs.set(empId, { name: empName, seconds: entry.duration_seconds || 0, taskCount: 1 });
+                      groupMap.set(key, { clientId: key, clientName: entry.client_account?.name || "—", clientLanguage: entry.client_account?.language, totalSeconds: entry.duration_seconds || 0, taskCount: 1, employeeSubs: empSubs });
+                    }
+                  }
+                  return Array.from(groupMap.values()).sort((a, b) => b.totalSeconds - a.totalSeconds).map((grp) => {
+                    const isOpen = !collapsedDashCalGroups.has(grp.clientId);
+                    return (
+                      <div key={grp.clientId} className="border border-[var(--border)] rounded-xl overflow-hidden">
+                        <button type="button" onClick={() => setCollapsedDashCalGroups(prev => { const n = new Set(prev); if (n.has(grp.clientId)) n.delete(grp.clientId); else n.add(grp.clientId); return n; })}
+                          className="w-full flex items-center justify-between px-4 py-3 bg-[var(--bg-surface-alt)] hover:bg-[var(--bg-surface-alt)]/80 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2 text-left">
+                            <span className="text-sm">{isOpen ? "▾" : "▸"}</span>
+                            <div>
+                              <p className="text-xs font-bold text-[var(--text-primary)]">
+                                {grp.clientName}{grp.clientLanguage && <span className="ml-1 font-normal text-[var(--text-secondary)]">({grp.clientLanguage})</span>}
+                              </p>
+                              <p className="text-[10px] text-[var(--text-secondary)]">{grp.taskCount} task · {grp.employeeSubs.size} karyawan</p>
+                            </div>
+                          </div>
+                          <span className="text-sm font-extrabold text-[var(--primary)] shrink-0 ml-2">{formatDecimalHours(grp.totalSeconds / 3600)}</span>
+                        </button>
+                        {isOpen && (
+                          <div className="divide-y divide-[var(--border)]">
+                            {Array.from(grp.employeeSubs.values()).sort((a, b) => b.seconds - a.seconds).map((emp) => (
+                              <div key={emp.name} className="flex items-center justify-between px-5 py-2 bg-[var(--bg-surface)]/60">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-teal)] shrink-0" />
+                                  <p className="text-xs text-[var(--text-secondary)] font-medium">{emp.name}</p>
+                                  <span className="text-[10px] text-[var(--text-secondary)]">{emp.taskCount} task</span>
+                                </div>
+                                <span className="text-xs font-bold text-[var(--text-primary)]">{formatDecimalHours(emp.seconds / 3600)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                } else {
+                  const empMap = new Map<string, {
+                    empId: string; empName: string; totalSeconds: number; taskCount: number;
+                    clientSubs: Map<string, { name: string; lang?: string | null; seconds: number; taskCount: number }>;
+                  }>();
+                  for (const entry of allEntries) {
+                    const empId = entry.session.user_id;
+                    const empName = entry.session.user?.full_name || "Karyawan";
+                    const clientKey = entry.client_account_id || "unknown";
+                    const existing = empMap.get(empId);
+                    if (existing) {
+                      existing.totalSeconds += entry.duration_seconds || 0;
+                      existing.taskCount += 1;
+                      const cs = existing.clientSubs.get(clientKey);
+                      if (cs) { cs.seconds += entry.duration_seconds || 0; cs.taskCount += 1; }
+                      else existing.clientSubs.set(clientKey, { name: entry.client_account?.name || "—", lang: entry.client_account?.language, seconds: entry.duration_seconds || 0, taskCount: 1 });
+                    } else {
+                      const clientSubs = new Map<string, { name: string; lang?: string | null; seconds: number; taskCount: number }>();
+                      clientSubs.set(clientKey, { name: entry.client_account?.name || "—", lang: entry.client_account?.language, seconds: entry.duration_seconds || 0, taskCount: 1 });
+                      empMap.set(empId, { empId, empName, totalSeconds: entry.duration_seconds || 0, taskCount: 1, clientSubs });
+                    }
+                  }
+                  return Array.from(empMap.values()).sort((a, b) => b.totalSeconds - a.totalSeconds).map((grp) => {
+                    const isOpen = !collapsedDashCalGroups.has(grp.empId);
+                    return (
+                      <div key={grp.empId} className="border border-[var(--border)] rounded-xl overflow-hidden">
+                        <button type="button" onClick={() => setCollapsedDashCalGroups(prev => { const n = new Set(prev); if (n.has(grp.empId)) n.delete(grp.empId); else n.add(grp.empId); return n; })}
+                          className="w-full flex items-center justify-between px-4 py-3 bg-[var(--bg-surface-alt)] hover:bg-[var(--bg-surface-alt)]/80 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2 text-left">
+                            <span className="text-sm">{isOpen ? "▾" : "▸"}</span>
+                            <div>
+                              <p className="text-xs font-bold text-[var(--text-primary)]">{grp.empName}</p>
+                              <p className="text-[10px] text-[var(--text-secondary)]">{grp.taskCount} task</p>
+                            </div>
+                          </div>
+                          <span className="text-sm font-extrabold text-[var(--primary)] shrink-0 ml-2">{formatDecimalHours(grp.totalSeconds / 3600)}</span>
+                        </button>
+                        {isOpen && (
+                          <div className="divide-y divide-[var(--border)]">
+                            {Array.from(grp.clientSubs.values()).sort((a, b) => b.seconds - a.seconds).map((cl) => (
+                              <div key={cl.name} className="flex items-center justify-between px-5 py-2 bg-[var(--bg-surface)]/60">
+                                <div className="flex items-center gap-2">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--border)] shrink-0" />
+                                  <p className="text-xs text-[var(--text-secondary)] font-medium">{cl.name}{cl.lang && <span className="ml-1 text-[var(--text-secondary)]">({cl.lang})</span>}</p>
+                                  <span className="text-[10px] text-[var(--text-secondary)]">{cl.taskCount} task</span>
+                                </div>
+                                <span className="text-xs font-bold text-[var(--text-primary)]">{formatDecimalHours(cl.seconds / 3600)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                }
+              })()}
             </div>
           </div>
         </div>

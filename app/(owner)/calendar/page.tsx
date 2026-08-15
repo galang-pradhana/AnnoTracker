@@ -37,6 +37,8 @@ export default function OwnerCalendarPage() {
   const [sessions, setSessions] = useState<WorkSessionWithEntries[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedDayData, setSelectedDayData] = useState<{ date: string; data: DayData } | null>(null);
+  const [calGroupMode, setCalGroupMode] = useState<"account" | "employee">("account");
+  const [collapsedCalGroups, setCollapsedCalGroups] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async (year: number, month: number) => {
     setIsLoading(true);
@@ -204,7 +206,7 @@ export default function OwnerCalendarPage() {
                 return (
                   <button
                     key={dateStr}
-                    onClick={() => hasData && setSelectedDayData({ date: dateStr, data: dayData! })}
+                    onClick={() => { if (hasData) { setCollapsedCalGroups(new Set()); setSelectedDayData({ date: dateStr, data: dayData! }); } }}
                     disabled={!hasData}
                     className={`
                       h-20 flex flex-col items-center justify-center border-b border-r border-slate-50 transition-all relative gap-1
@@ -255,13 +257,13 @@ export default function OwnerCalendarPage() {
           onClick={() => setSelectedDayData(null)}
         >
           <div
-            className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl max-h-[80vh] overflow-y-auto"
+            className="w-full sm:max-w-lg bg-white rounded-t-3xl sm:rounded-2xl p-6 shadow-2xl max-h-[85vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-4 sm:hidden" />
 
             {/* Modal Header */}
-            <div className="flex items-start justify-between mb-5">
+            <div className="flex items-start justify-between mb-4">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
                   {new Date(selectedDayData.date + "T00:00:00").toLocaleDateString("id-ID", {
@@ -282,36 +284,191 @@ export default function OwnerCalendarPage() {
               </button>
             </div>
 
-            {/* Per-employee breakdown */}
-            <div className="space-y-3">
-              {selectedDayData.data.sessions.map((session, idx) => {
-                const sessSecs = session.task_entries.reduce((sum, e) => sum + e.duration_seconds, 0);
-                return (
-                  <div key={session.id || idx} className="bg-slate-50 rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-sm font-bold text-slate-900">
-                        {session.user?.full_name || "Karyawan"}
-                      </p>
-                      <span className="text-sm font-bold text-teal-700">
-                        {formatDecimalHours(sessSecs / 3600)}
-                      </span>
-                    </div>
-                    <div className="space-y-1">
-                      {session.task_entries.map((entry, eIdx) => (
-                        <div key={entry.id || eIdx} className="flex items-center justify-between text-xs text-slate-500">
-                          <span>{entry.client_account?.name || "—"} · {entry.task_type?.name || "—"}</span>
-                          <span className="font-medium text-slate-700">{formatDecimalHours(entry.duration_seconds / 3600)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {session.proof_note && (
-                      <p className="mt-2 text-[11px] italic text-slate-400 border-t border-slate-200 pt-1.5">
-                        &ldquo;{session.proof_note}&rdquo;
-                      </p>
-                    )}
-                  </div>
+            {/* Toggle Mode */}
+            <div className="flex gap-1 p-1 bg-slate-100 rounded-xl mb-4">
+              {(["account", "employee"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => { setCalGroupMode(mode); setCollapsedCalGroups(new Set()); }}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    calGroupMode === mode
+                      ? "bg-white text-teal-700 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  {mode === "account" ? "🏢 Per Akun" : "👤 Per Karyawan"}
+                </button>
+              ))}
+            </div>
+
+            {/* Grouped Content */}
+            <div className="space-y-2">
+              {(() => {
+                const allEntries = selectedDayData.data.sessions.flatMap(s =>
+                  (s.task_entries || []).map(e => ({ ...e, session: s }))
                 );
-              })}
+
+                if (calGroupMode === "account") {
+                  // Group by client account
+                  const groupMap = new Map<string, {
+                    clientId: string;
+                    clientName: string;
+                    clientLanguage?: string | null;
+                    totalSeconds: number;
+                    taskCount: number;
+                    employeeSubs: Map<string, { name: string; seconds: number; taskCount: number }>;
+                  }>();
+
+                  for (const entry of allEntries) {
+                    const key = entry.client_account_id || "unknown";
+                    const empName = entry.session.user?.full_name || "Karyawan";
+                    const empId = entry.session.user_id;
+                    const existing = groupMap.get(key);
+                    if (existing) {
+                      existing.totalSeconds += entry.duration_seconds || 0;
+                      existing.taskCount += 1;
+                      const empSub = existing.employeeSubs.get(empId);
+                      if (empSub) { empSub.seconds += entry.duration_seconds || 0; empSub.taskCount += 1; }
+                      else existing.employeeSubs.set(empId, { name: empName, seconds: entry.duration_seconds || 0, taskCount: 1 });
+                    } else {
+                      const empSubs = new Map<string, { name: string; seconds: number; taskCount: number }>();
+                      empSubs.set(empId, { name: empName, seconds: entry.duration_seconds || 0, taskCount: 1 });
+                      groupMap.set(key, {
+                        clientId: key,
+                        clientName: entry.client_account?.name || "—",
+                        clientLanguage: entry.client_account?.language,
+                        totalSeconds: entry.duration_seconds || 0,
+                        taskCount: 1,
+                        employeeSubs: empSubs,
+                      });
+                    }
+                  }
+
+                  return Array.from(groupMap.values())
+                    .sort((a, b) => b.totalSeconds - a.totalSeconds)
+                    .map((grp) => {
+                      const isOpen = !collapsedCalGroups.has(grp.clientId);
+                      return (
+                        <div key={grp.clientId} className="border border-slate-200 rounded-xl overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setCollapsedCalGroups(prev => {
+                              const next = new Set(prev);
+                              if (next.has(grp.clientId)) next.delete(grp.clientId); else next.add(grp.clientId);
+                              return next;
+                            })}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2 text-left">
+                              <span className="text-sm">{isOpen ? "▾" : "▸"}</span>
+                              <div>
+                                <p className="text-xs font-bold text-slate-900">
+                                  {grp.clientName}
+                                  {grp.clientLanguage && <span className="ml-1 font-normal text-slate-400">({grp.clientLanguage})</span>}
+                                </p>
+                                <p className="text-[10px] text-slate-400">{grp.taskCount} task · {grp.employeeSubs.size} karyawan</p>
+                              </div>
+                            </div>
+                            <span className="text-sm font-extrabold text-teal-600 shrink-0 ml-2">
+                              {formatDecimalHours(grp.totalSeconds / 3600)}
+                            </span>
+                          </button>
+                          {isOpen && (
+                            <div className="divide-y divide-slate-100">
+                              {Array.from(grp.employeeSubs.values())
+                                .sort((a, b) => b.seconds - a.seconds)
+                                .map((emp) => (
+                                  <div key={emp.name} className="flex items-center justify-between px-5 py-2 bg-white">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-teal-400 shrink-0" />
+                                      <p className="text-xs text-slate-600 font-medium">{emp.name}</p>
+                                      <span className="text-[10px] text-slate-400">{emp.taskCount} task</span>
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-700">{formatDecimalHours(emp.seconds / 3600)}</span>
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                } else {
+                  // Group by employee
+                  const empMap = new Map<string, {
+                    empId: string;
+                    empName: string;
+                    totalSeconds: number;
+                    taskCount: number;
+                    clientSubs: Map<string, { name: string; lang?: string | null; seconds: number; taskCount: number }>;
+                  }>();
+
+                  for (const entry of allEntries) {
+                    const empId = entry.session.user_id;
+                    const empName = entry.session.user?.full_name || "Karyawan";
+                    const clientKey = entry.client_account_id || "unknown";
+                    const existing = empMap.get(empId);
+                    if (existing) {
+                      existing.totalSeconds += entry.duration_seconds || 0;
+                      existing.taskCount += 1;
+                      const clientSub = existing.clientSubs.get(clientKey);
+                      if (clientSub) { clientSub.seconds += entry.duration_seconds || 0; clientSub.taskCount += 1; }
+                      else existing.clientSubs.set(clientKey, { name: entry.client_account?.name || "—", lang: entry.client_account?.language, seconds: entry.duration_seconds || 0, taskCount: 1 });
+                    } else {
+                      const clientSubs = new Map<string, { name: string; lang?: string | null; seconds: number; taskCount: number }>();
+                      clientSubs.set(clientKey, { name: entry.client_account?.name || "—", lang: entry.client_account?.language, seconds: entry.duration_seconds || 0, taskCount: 1 });
+                      empMap.set(empId, { empId, empName, totalSeconds: entry.duration_seconds || 0, taskCount: 1, clientSubs });
+                    }
+                  }
+
+                  return Array.from(empMap.values())
+                    .sort((a, b) => b.totalSeconds - a.totalSeconds)
+                    .map((grp) => {
+                      const isOpen = !collapsedCalGroups.has(grp.empId);
+                      return (
+                        <div key={grp.empId} className="border border-slate-200 rounded-xl overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setCollapsedCalGroups(prev => {
+                              const next = new Set(prev);
+                              if (next.has(grp.empId)) next.delete(grp.empId); else next.add(grp.empId);
+                              return next;
+                            })}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2 text-left">
+                              <span className="text-sm">{isOpen ? "▾" : "▸"}</span>
+                              <div>
+                                <p className="text-xs font-bold text-slate-900">{grp.empName}</p>
+                                <p className="text-[10px] text-slate-400">{grp.taskCount} task</p>
+                              </div>
+                            </div>
+                            <span className="text-sm font-extrabold text-teal-600 shrink-0 ml-2">
+                              {formatDecimalHours(grp.totalSeconds / 3600)}
+                            </span>
+                          </button>
+                          {isOpen && (
+                            <div className="divide-y divide-slate-100">
+                              {Array.from(grp.clientSubs.values())
+                                .sort((a, b) => b.seconds - a.seconds)
+                                .map((cl) => (
+                                  <div key={cl.name} className="flex items-center justify-between px-5 py-2 bg-white">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                                      <p className="text-xs text-slate-600 font-medium">
+                                        {cl.name}{cl.lang && <span className="ml-1 text-slate-400">({cl.lang})</span>}
+                                      </p>
+                                      <span className="text-[10px] text-slate-400">{cl.taskCount} task</span>
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-700">{formatDecimalHours(cl.seconds / 3600)}</span>
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                }
+              })()}
             </div>
           </div>
         </div>
