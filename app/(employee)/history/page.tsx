@@ -4,6 +4,8 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { localDB } from "@/lib/offline/db";
+import { processSyncQueue, migrateDemoUserRecords } from "@/lib/offline/syncEngine";
 import { formatDecimalHours, formatRupiah } from "@/lib/utils";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { AppLogo } from "@/components/shared/AppLogo";
@@ -78,11 +80,15 @@ export default function EmployeeHistoryPage() {
       if (!user) { router.push(ROUTES.LOGIN); return; }
       setUserId(user.id);
 
+      // Migrate demo-employee-id records if user is logged in & trigger sync
+      await migrateDemoUserRecords(user.id);
+      processSyncQueue();
+
       const periodStart = `${year}-${String(month + 1).padStart(2, "0")}-01`;
       const lastDay = getDaysInMonth(year, month);
       const periodEnd = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
-      const [sessionRes, tiersRes, bonusRes, userRatesRes] = await Promise.all([
+      const [sessionRes, tiersRes, bonusRes, userRatesRes, clientRes, taskRes] = await Promise.all([
         supabase
           .from("work_sessions")
           .select("*, task_entries(*, client_account:client_accounts(*), task_type:task_types(*))")
@@ -93,9 +99,68 @@ export default function EmployeeHistoryPage() {
         supabase.from("salary_tiers").select("*").order("min_hours"),
         supabase.from("bonus_rules").select("*").order("effective_from", { ascending: false }),
         supabase.from("user_salary_rates").select("*").eq("user_id", user.id).lte("effective_from", periodEnd).order("effective_from", { ascending: false }),
+        supabase.from("client_accounts").select("*"),
+        supabase.from("task_types").select("*"),
       ]);
 
-      if (sessionRes.data) setSessions(sessionRes.data as unknown as WorkSessionWithEntries[]);
+      const supabaseSessions = (sessionRes.data || []) as unknown as WorkSessionWithEntries[];
+      const masterClients = clientRes.data || [];
+      const masterTaskTypes = taskRes.data || [];
+
+      // Merge with Dexie localDB records
+      const localSessions = await localDB.work_sessions
+        .where("user_id")
+        .equals(user.id)
+        .filter(s => s.session_date >= periodStart && s.session_date <= periodEnd)
+        .toArray();
+
+      const localSessionIds = localSessions.map(s => s.id);
+      const localEntries = localSessionIds.length > 0
+        ? await localDB.task_entries.where("session_id").anyOf(localSessionIds).toArray()
+        : [];
+
+      const mergedMap = new Map<string, WorkSessionWithEntries>();
+
+      for (const sess of supabaseSessions) {
+        mergedMap.set(sess.session_date, {
+          ...sess,
+          task_entries: [...(sess.task_entries || [])],
+        });
+      }
+
+      for (const locSess of localSessions) {
+        const existingSess = mergedMap.get(locSess.session_date);
+        const locEntriesForSess = localEntries.filter(e => e.session_id === locSess.id);
+
+        if (existingSess) {
+          const existingEntryIds = new Set(existingSess.task_entries.map(e => e.id));
+          for (const locEntry of locEntriesForSess) {
+            if (!existingEntryIds.has(locEntry.id)) {
+              existingSess.task_entries.push({
+                ...locEntry,
+                client_account: masterClients.find(c => c.id === locEntry.client_account_id),
+                task_type: masterTaskTypes.find(t => t.id === locEntry.task_type_id),
+              });
+              existingEntryIds.add(locEntry.id);
+            }
+          }
+        } else {
+          mergedMap.set(locSess.session_date, {
+            ...locSess,
+            task_entries: locEntriesForSess.map(locEntry => ({
+              ...locEntry,
+              client_account: masterClients.find(c => c.id === locEntry.client_account_id),
+              task_type: masterTaskTypes.find(t => t.id === locEntry.task_type_id),
+            })),
+          });
+        }
+      }
+
+      const mergedSessions = Array.from(mergedMap.values()).sort((a, b) =>
+        a.session_date.localeCompare(b.session_date)
+      );
+
+      setSessions(mergedSessions);
       if (tiersRes.data && tiersRes.data.length > 0) setSalaryTiers(tiersRes.data);
       if (bonusRes.data && bonusRes.data.length > 0) setBonusRules(bonusRes.data);
       if (userRatesRes.data) setUserSalaryRates(userRatesRes.data as unknown as UserSalaryRate[]);
@@ -209,12 +274,6 @@ export default function EmployeeHistoryPage() {
   const isCurrentMonth = viewYear === today.getFullYear() && viewMonth === today.getMonth();
   const isFutureDisabled = viewYear > today.getFullYear() ||
     (viewYear === today.getFullYear() && viewMonth >= today.getMonth());
-
-  const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push(ROUTES.LOGIN);
-  };
 
   const getDayTierRate = (dayHours: number, dateStr: string) =>
     determineUserHourlyRate(userId, dayHours, dateStr, salaryTiers, userSalaryRates);

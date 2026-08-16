@@ -15,6 +15,9 @@ export async function migrateDemoUserRecords(realUserId: string): Promise<void> 
   if (!realUserId || realUserId === "demo-employee-id") return;
 
   try {
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    // 1. Migrate demo-employee-id sessions to realUserId
     const demoSessions = await localDB.work_sessions
       .where("user_id")
       .equals("demo-employee-id")
@@ -65,6 +68,39 @@ export async function migrateDemoUserRecords(realUserId: string): Promise<void> 
           const payload = { ...qItem.payload, user_id: realUserId };
           await localDB.sync_queue.update(qItem.id, { payload });
         }
+      }
+    }
+
+    // 2. Repair orphan task_entries whose session_id does not exist in work_sessions
+    const allLocalSessions = await localDB.work_sessions.toArray();
+    const validSessionIds = new Set(allLocalSessions.map((s) => s.id));
+    const orphanEntries = await localDB.task_entries
+      .filter((e) => !validSessionIds.has(e.session_id))
+      .toArray();
+
+    if (orphanEntries.length > 0) {
+      let todaySession = await localDB.work_sessions
+        .where("[user_id+session_date]")
+        .equals([realUserId, todayStr])
+        .first();
+
+      if (!todaySession) {
+        const newSessId = crypto.randomUUID();
+        todaySession = {
+          id: newSessId,
+          user_id: realUserId,
+          session_date: todayStr,
+          proof_type: null,
+          proof_url: null,
+          proof_note: null,
+          sync_status: "pending",
+          created_at: new Date().toISOString(),
+        };
+        await localDB.work_sessions.add(todaySession);
+      }
+
+      for (const orphan of orphanEntries) {
+        await localDB.task_entries.update(orphan.id, { session_id: todaySession.id });
       }
     }
   } catch (err) {
