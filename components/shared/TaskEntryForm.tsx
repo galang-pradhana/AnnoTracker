@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import type { ClientAccount, TaskType } from "@/types";
+import type { ClientAccount, TaskType, TaskNote } from "@/types";
+import { TaskNoteModal } from "@/components/shared/TaskNoteModal";
 
 interface CustomPreset {
   label: string;
@@ -22,6 +23,7 @@ interface TaskEntryFormProps {
     client_account_id: string;
     task_type_id: string;
     duration_seconds: number;
+    note: string; // JSON.stringify(TaskNote)
   }) => void;
   initialDurationSeconds?: number | null;
 }
@@ -75,6 +77,14 @@ export function TaskEntryForm({
   const [rawSecondsText, setRawSecondsText] = useState<string>("");
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Modal note state
+  const [showNoteModal, setShowNoteModal] = useState<boolean>(false);
+  const [pendingSubmitData, setPendingSubmitData] = useState<{
+    client_account_id: string;
+    task_type_id: string;
+    duration_seconds: number;
+  } | null>(null);
 
   // Presets & Ellipsis menu state
   const [presets, setPresets] = useState<CustomPreset[]>(DEFAULT_PRESETS);
@@ -176,15 +186,33 @@ export function TaskEntryForm({
       return;
     }
 
-    onAddTask({
+    // Simpan data sementara, buka modal note dulu
+    setPendingSubmitData({
       client_account_id: selectedAccount,
       task_type_id: selectedTaskType,
       duration_seconds: durationSeconds,
     });
+    setShowNoteModal(true);
+  };
 
-    // Reset duration ONLY, preserve account & task context for rapid submission
+  const handleNoteConfirm = (note: TaskNote) => {
+    if (!pendingSubmitData) return;
+
+    onAddTask({
+      ...pendingSubmitData,
+      note: JSON.stringify(note),
+    });
+
+    // Reset state
+    setShowNoteModal(false);
+    setPendingSubmitData(null);
     setDurationSeconds(0);
     setRawSecondsText("");
+  };
+
+  const handleNoteCancel = () => {
+    setShowNoteModal(false);
+    setPendingSubmitData(null);
   };
 
   const { timeStr, subText } = formatStopwatchDisplay(durationSeconds);
@@ -490,16 +518,38 @@ export function TaskEntryForm({
           </div>
         )}
 
-        {/* 3. Submit Button (Primary Terracotta Orange) */}
-        <div className="mt-6">
+        {/* 3. Submit Button */}
+        <div className="mt-6 space-y-2">
           <button
             type="submit"
             className="w-full py-3.5 px-4 bg-[var(--primary)] hover:bg-[var(--primary-hover)] active:scale-[0.99] text-white font-bold text-sm sm:text-base rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
-            <span>✓ Simpan Entri Pekerjaan</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <span>Simpan Entri Pekerjaan</span>
           </button>
+          {/* Mandatory note reminder */}
+          <p className="text-center text-[10px] text-[var(--text-secondary)] flex items-center justify-center gap-1">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+              <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            Form note Task ID wajib diisi sebelum tersimpan
+          </p>
         </div>
       </form>
+
+      {/* Task Note Modal — muncul saat submit */}
+      <TaskNoteModal
+        isOpen={showNoteModal}
+        onConfirm={handleNoteConfirm}
+        onCancel={handleNoteCancel}
+        durationLabel={pendingSubmitData ? (() => {
+          const { timeStr } = formatStopwatchDisplay(pendingSubmitData.duration_seconds);
+          return timeStr;
+        })() : undefined}
+      />
     </div>
   );
 }

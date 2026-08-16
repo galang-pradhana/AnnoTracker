@@ -65,6 +65,18 @@ export function TaskEntryList({
       <div className="max-h-72 overflow-y-auto pr-1 space-y-2 divide-y divide-[var(--border)]">
         {recentEntries.map((entry) => {
           const submitTime = formatSubmitTime(entry.created_at);
+
+          // Parse note JSON jika ada
+          let taskId: string | null = null;
+          if (entry.note) {
+            try {
+              const parsed = JSON.parse(entry.note);
+              taskId = parsed.task_id || null;
+            } catch {
+              // note bukan JSON valid, abaikan
+            }
+          }
+
           return (
             <div
               key={entry.id}
@@ -79,6 +91,16 @@ export function TaskEntryList({
                 <p className="text-[11px] text-[var(--text-secondary)] truncate">
                   {entry.client_account?.name || "Akun Klien"}
                 </p>
+                {/* Task ID singkat dari note */}
+                {taskId && (
+                  <p className="text-[10px] text-[var(--primary)] truncate mt-0.5 flex items-center gap-1" title={`Task ID: ${taskId}`}>
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" className="shrink-0">
+                      <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="2"/>
+                      <path d="M3 9h18M9 21V9" stroke="currentColor" strokeWidth="2"/>
+                    </svg>
+                    {taskId.substring(0, 8)}…
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center gap-2 shrink-0">

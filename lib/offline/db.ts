@@ -34,6 +34,13 @@ export class AnnoTrackerLocalDB extends Dexie {
       task_entries: "id, session_id, client_account_id, task_type_id, created_at",
       sync_queue: "id, action, table_name, record_id, status, created_at",
     });
+
+    // Version 3 — add note field to task_entries for mandatory task metadata (Task ID, Work ID, etc.)
+    this.version(3).stores({
+      work_sessions: "id, user_id, session_date, sync_status, created_at, [user_id+session_date]",
+      task_entries: "id, session_id, client_account_id, task_type_id, created_at",
+      sync_queue: "id, action, table_name, record_id, status, created_at",
+    });
   }
 }
 

@@ -40,6 +40,13 @@ export interface WorkSession {
   created_at: string;
 }
 
+export interface TaskNote {
+  collection_id: string;
+  task_id: string;
+  work_id: string;
+  user_id_note: string;
+}
+
 export interface TaskEntry {
   id: string;
   session_id: string;
@@ -47,6 +54,7 @@ export interface TaskEntry {
   task_type_id: string;
   duration_seconds: number;
   entry_order: number;
+  note?: string | null; // JSON stringified TaskNote
   created_at: string;
 }
 

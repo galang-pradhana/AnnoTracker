@@ -188,6 +188,7 @@ export default function WorkSessionPage() {
     client_account_id: string;
     task_type_id: string;
     duration_seconds: number;
+    note: string;
   }) => {
     if (!currentSessionId) return;
 
@@ -198,6 +199,7 @@ export default function WorkSessionPage() {
       client_account_id: data.client_account_id,
       task_type_id: data.task_type_id,
       duration_seconds: data.duration_seconds,
+      note: data.note,
       entry_order: entriesWithDetails.length + 1,
       created_at: new Date().toISOString(),
     };

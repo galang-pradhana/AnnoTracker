@@ -251,6 +251,7 @@ export async function processSyncQueue(): Promise<{
             "task_type_id",
             "duration_seconds",
             "entry_order",
+            "note",
             "created_at",
           ]);
 
