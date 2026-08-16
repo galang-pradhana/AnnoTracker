@@ -83,7 +83,6 @@ export function TaskEntryForm({
   const [pendingSubmitData, setPendingSubmitData] = useState<{
     client_account_id: string;
     task_type_id: string;
-    duration_seconds: number;
   } | null>(null);
 
   // Presets & Ellipsis menu state
@@ -165,8 +164,7 @@ export function TaskEntryForm({
     setPresets((prev) => prev.filter((p) => p.seconds !== seconds));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleOpenModal = () => {
     setErrorMsg(null);
 
     if (!selectedAccount) {
@@ -181,31 +179,26 @@ export function TaskEntryForm({
       return;
     }
 
-    if (durationSeconds <= 0) {
-      setErrorMsg("Durasi task harus lebih dari 0 detik.");
-      return;
-    }
-
-    // Simpan data sementara, buka modal note dulu
+    // Durasi akan diisi di dalam modal
     setPendingSubmitData({
       client_account_id: selectedAccount,
       task_type_id: selectedTaskType,
-      duration_seconds: durationSeconds,
     });
     setShowNoteModal(true);
   };
 
-  const handleNoteConfirm = (note: TaskNote) => {
+  const handleNoteConfirm = ({ note, duration_seconds }: { note: TaskNote; duration_seconds: number }) => {
     if (!pendingSubmitData) return;
 
     onAddTask({
       ...pendingSubmitData,
+      duration_seconds,
       note: JSON.stringify(note),
     });
 
-    // Reset state
     setShowNoteModal(false);
     setPendingSubmitData(null);
+    // Reset durasi referensi di form utama juga
     setDurationSeconds(0);
     setRawSecondsText("");
   };
@@ -215,11 +208,9 @@ export function TaskEntryForm({
     setPendingSubmitData(null);
   };
 
-  const { timeStr, subText } = formatStopwatchDisplay(durationSeconds);
-
   return (
     <div className="bg-[var(--bg-surface)] rounded-2xl p-5 border border-[var(--border)] shadow-xs space-y-5">
-      {/* 1. Context Selector Header (Ramping Breadcrumb Pill Style) */}
+      {/* 1. Context Selector Header */}
       <div className="bg-[var(--bg-surface-alt)] rounded-xl p-3 border border-[var(--border)]">
         {!isEditingContext && selectedAccountObj && selectedTaskTypeObj ? (
           <div className="flex items-center justify-between gap-2">
@@ -235,7 +226,6 @@ export function TaskEntryForm({
                 {selectedTaskTypeObj.name}
               </span>
             </div>
-
             <button
               type="button"
               onClick={() => setIsEditingContext(true)}
@@ -260,7 +250,6 @@ export function TaskEntryForm({
                 </button>
               )}
             </div>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <select
                 value={selectedAccount}
@@ -274,7 +263,6 @@ export function TaskEntryForm({
                   </option>
                 ))}
               </select>
-
               <select
                 value={selectedTaskType}
                 onChange={(e) => handleTaskTypeChange(e.target.value)}
@@ -298,257 +286,33 @@ export function TaskEntryForm({
         </div>
       )}
 
-      {/* 2. Digital Stopwatch Input Section */}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="bg-[var(--bg-surface-alt)]/60 rounded-2xl p-4 sm:p-5 border border-[var(--border)] space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-              Input Durasi Kerja
-            </span>
+      {/* 2. Tombol utama — membuka modal Catat Task */}
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={handleOpenModal}
+          className="w-full py-4 px-4 bg-[var(--primary)] hover:bg-[var(--primary-hover)] active:scale-[0.99] text-white font-bold text-sm sm:text-base rounded-xl shadow-md transition-all flex items-center justify-center gap-2.5 cursor-pointer"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M12 12h4M12 16h4M8 12h.01M8 16h.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          <span>📋 Catat Task</span>
+        </button>
+        <p className="text-center text-[10px] text-[var(--text-secondary)] flex items-center justify-center gap-1">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+            <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+          Paste info task → isi durasi → simpan
+        </p>
+      </div>
 
-            {/* Ellipsis Gear Menu Toggle */}
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowEllipsisMenu((v) => !v)}
-                className="p-1.5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] rounded-lg hover:bg-[var(--border)] transition-colors"
-                title="Pengaturan Durasi & Preset"
-              >
-                <span className="text-base leading-none">⚙️</span>
-              </button>
-
-              {showEllipsisMenu && (
-                <div className="absolute right-0 mt-1 w-48 bg-[var(--bg-surface)] rounded-xl shadow-lg border border-[var(--border)] z-20 py-1 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRawInputMode((v) => !v);
-                      setShowEllipsisMenu(false);
-                    }}
-                    className="w-full text-left px-3 py-2 text-[var(--text-primary)] hover:bg-[var(--bg-surface-alt)] flex items-center justify-between"
-                  >
-                    <span>{rawInputMode ? "Modus Stopwatch" : "Modus Ketik Detik"}</span>
-                    <span className="text-[10px]">⌨️</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowPresetPanel(true);
-                      setShowEllipsisMenu(false);
-                    }}
-                    className="w-full text-left px-3 py-2 text-[var(--text-primary)] hover:bg-[var(--bg-surface-alt)] flex items-center justify-between"
-                  >
-                    <span>Atur Preset Cepat</span>
-                    <span className="text-[10px]">🛠️</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDurationSeconds(0);
-                      setRawSecondsText("");
-                      setShowEllipsisMenu(false);
-                    }}
-                    className="w-full text-left px-3 py-2 text-[var(--danger)] hover:bg-[var(--primary-soft)] flex items-center justify-between border-t border-[var(--border)]"
-                  >
-                    <span>Reset Durasi</span>
-                    <span className="text-[10px]">✕</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Stopwatch Big Display + Steppers */}
-          {!rawInputMode ? (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2 pt-1">
-                {/* Stepper Kiri (-1m & -10s) */}
-                <div className="flex flex-col gap-1.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleAdjustDuration(-60)}
-                    disabled={durationSeconds < 60}
-                    className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:bg-[var(--primary-soft)] disabled:opacity-30 text-[var(--text-primary)] font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center"
-                    title="-1 Menit"
-                  >
-                    -1m
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAdjustDuration(-10)}
-                    disabled={durationSeconds < 10}
-                    className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:bg-[var(--primary-soft)] disabled:opacity-30 text-[var(--text-primary)] font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center"
-                    title="-10 Detik"
-                  >
-                    -10d
-                  </button>
-                </div>
-
-                {/* Big Stopwatch Display Center */}
-                <div className="flex-1 text-center bg-[var(--bg-surface)] rounded-2xl py-4 sm:py-6 px-2 border border-[var(--border)] shadow-inner overflow-hidden">
-                  <div className="font-mono text-3xl sm:text-5xl font-extrabold text-[var(--text-primary)] tracking-tight overflow-hidden text-ellipsis whitespace-nowrap">
-                    {timeStr}
-                  </div>
-                  <p className="text-xs font-semibold text-[var(--primary)] mt-1">
-                    {subText}
-                  </p>
-                </div>
-
-                {/* Stepper Kanan (+10s & +1m) */}
-                <div className="flex flex-col gap-1.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleAdjustDuration(60)}
-                    className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:bg-[var(--primary-soft)] text-[var(--text-primary)] font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center"
-                    title="+1 Menit"
-                  >
-                    +1m
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAdjustDuration(10)}
-                    className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[var(--bg-surface)] border border-[var(--border)] hover:bg-[var(--primary-soft)] text-[var(--text-primary)] font-bold text-xs shadow-xs active:scale-95 transition-all flex items-center justify-center"
-                    title="+10 Detik"
-                  >
-                    +10d
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="pt-1">
-              <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">
-                Ketik Durasi Langsung dalam Detik:
-              </label>
-              <input
-                type="number"
-                min="0"
-                placeholder="Contoh: 580"
-                value={rawSecondsText}
-                onChange={handleRawTextChange}
-                className="w-full px-4 py-3 text-lg font-mono font-bold rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
-              />
-              <p className="text-xs text-[var(--primary)] mt-1">
-                {subText}
-              </p>
-            </div>
-          )}
-
-          {/* Quick-Add Chips below stopwatch */}
-          <div className="pt-2">
-            <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
-              {presets.map(({ label, seconds }) => (
-                <button
-                  key={seconds}
-                  type="button"
-                  onClick={() => handleAdjustDuration(seconds)}
-                  className="px-3 py-1.5 bg-[var(--primary-soft)] hover:brightness-95 text-[var(--primary)] border border-[var(--primary)]/20 text-xs font-bold rounded-full transition-all active:scale-95 shadow-xs"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Preset Management Sub-Panel */}
-        {showPresetPanel && (
-          <div className="p-3.5 bg-[var(--bg-surface-alt)] rounded-xl border border-[var(--border)] space-y-3 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-bold text-[var(--text-primary)]">
-                ⚙️ Pengaturan Chip Preset
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowPresetPanel(false)}
-                className="text-[10px] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              >
-                Tutup ✕
-              </button>
-            </div>
-
-            <div className="flex flex-wrap gap-1.5">
-              {presets.map(({ label, seconds }) => (
-                <div
-                  key={seconds}
-                  className="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg px-2 py-1 text-xs"
-                >
-                  <span className="font-semibold text-[var(--text-primary)]">
-                    {label}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemovePreset(seconds)}
-                    className="text-[var(--danger)] font-bold ml-1"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="number"
-                min="1"
-                placeholder="Jumlah"
-                value={newAmount}
-                onChange={(e) => setNewAmount(e.target.value)}
-                className="w-20 px-2.5 py-1 rounded-lg border border-[var(--border)] text-xs bg-[var(--bg-surface)] text-[var(--text-primary)]"
-              />
-              <select
-                value={newUnit}
-                onChange={(e) => setNewUnit(e.target.value as any)}
-                className="px-2 py-1 rounded-lg border border-[var(--border)] text-xs bg-[var(--bg-surface)] text-[var(--text-primary)]"
-              >
-                <option value="menit">Menit</option>
-                <option value="detik">Detik</option>
-                <option value="jam">Jam</option>
-              </select>
-              <button
-                type="button"
-                onClick={handleAddNewPreset}
-                className="px-3 py-1 bg-[var(--primary)] text-white text-xs font-semibold rounded-lg hover:bg-[var(--primary-hover)]"
-              >
-                + Tambah
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* 3. Submit Button */}
-        <div className="mt-6 space-y-2">
-          <button
-            type="submit"
-            className="w-full py-3.5 px-4 bg-[var(--primary)] hover:bg-[var(--primary-hover)] active:scale-[0.99] text-white font-bold text-sm sm:text-base rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <span>Simpan Entri Pekerjaan</span>
-          </button>
-          {/* Mandatory note reminder */}
-          <p className="text-center text-[10px] text-[var(--text-secondary)] flex items-center justify-center gap-1">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-              <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-            Form note Task ID wajib diisi sebelum tersimpan
-          </p>
-        </div>
-      </form>
-
-      {/* Task Note Modal — muncul saat submit */}
+      {/* Task Note Modal */}
       <TaskNoteModal
         isOpen={showNoteModal}
         onConfirm={handleNoteConfirm}
         onCancel={handleNoteCancel}
-        durationLabel={pendingSubmitData ? (() => {
-          const { timeStr } = formatStopwatchDisplay(pendingSubmitData.duration_seconds);
-          return timeStr;
-        })() : undefined}
+        initialDurationSeconds={durationSeconds > 0 ? durationSeconds : undefined}
       />
     </div>
   );
