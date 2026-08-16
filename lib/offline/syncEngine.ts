@@ -189,39 +189,45 @@ export async function processSyncQueue(): Promise<{
               payload.id = crypto.randomUUID();
             }
 
-            // Fix invalid session_id (e.g., "session-2026-07-28")
-            if (!isValidUUID(String(payload.session_id))) {
-              const todayStr = new Date().toISOString().split("T")[0];
-              if (validSessionId && isValidUUID(validSessionId)) {
-                payload.session_id = validSessionId;
-              } else {
-                // Find or create valid session in Supabase for user & date
-                const { data: sessData } = await supabase
-                  .from("work_sessions")
-                  .select("id")
-                  .eq("user_id", user?.id)
-                  .eq("session_date", todayStr)
-                  .maybeSingle();
+            const entryDate = payload.created_at
+              ? String(payload.created_at).split("T")[0]
+              : new Date().toISOString().split("T")[0];
 
-                if (sessData?.id && isValidUUID(sessData.id)) {
-                  payload.session_id = sessData.id;
-                  validSessionId = sessData.id;
-                } else if (user?.id) {
-                  // Create session in Supabase first
-                  const newSessId = crypto.randomUUID();
-                  await supabase.from("work_sessions").insert({
-                    id: newSessId,
+            if (user?.id) {
+              // Check if Supabase already has a canonical work_session for user & entryDate
+              const { data: sessData } = await supabase
+                .from("work_sessions")
+                .select("id")
+                .eq("user_id", user.id)
+                .eq("session_date", entryDate)
+                .maybeSingle();
+
+              if (sessData?.id && isValidUUID(sessData.id)) {
+                payload.session_id = sessData.id;
+                validSessionId = sessData.id;
+                // Update local task_entry in Dexie DB as well to keep foreign key consistent
+                await localDB.task_entries.update(item.record_id, { session_id: sessData.id }).catch(() => {});
+              } else {
+                // Ensure work_session exists in Supabase for this date before inserting task_entry
+                const sessIdToUse = (payload.session_id && isValidUUID(String(payload.session_id)))
+                  ? String(payload.session_id)
+                  : (validSessionId && isValidUUID(validSessionId)) ? validSessionId : crypto.randomUUID();
+
+                await supabase.from("work_sessions").upsert(
+                  {
+                    id: sessIdToUse,
                     user_id: user.id,
-                    session_date: todayStr,
+                    session_date: entryDate,
                     proof_type: null,
                     proof_url: null,
                     proof_note: null,
                     sync_status: "synced",
                     created_at: new Date().toISOString(),
-                  });
-                  payload.session_id = newSessId;
-                  validSessionId = newSessId;
-                }
+                  },
+                  { onConflict: "id" }
+                );
+                payload.session_id = sessIdToUse;
+                validSessionId = sessIdToUse;
               }
             }
 
@@ -239,33 +245,6 @@ export async function processSyncQueue(): Promise<{
               payload.task_type_id = mockTaskMap[rawTaskId];
             } else if (!realTaskTypes.some((t) => t.id === rawTaskId) && realTaskTypes.length > 0) {
               payload.task_type_id = realTaskTypes[0].id;
-            }
-
-            // Ensure parent session_id exists in Supabase work_sessions before inserting task_entry
-            if (payload.session_id && isValidUUID(String(payload.session_id)) && user?.id) {
-              const currentSessionIdToVerify = String(payload.session_id);
-              const { data: existingSess } = await supabase
-                .from("work_sessions")
-                .select("id")
-                .eq("id", currentSessionIdToVerify)
-                .maybeSingle();
-
-              if (!existingSess) {
-                const todayStr = new Date().toISOString().split("T")[0];
-                await supabase.from("work_sessions").upsert(
-                  {
-                    id: currentSessionIdToVerify,
-                    user_id: user.id,
-                    session_date: todayStr,
-                    proof_type: null,
-                    proof_url: null,
-                    proof_note: null,
-                    sync_status: "synced",
-                    created_at: new Date().toISOString(),
-                  },
-                  { onConflict: "id" }
-                );
-              }
             }
           }
 

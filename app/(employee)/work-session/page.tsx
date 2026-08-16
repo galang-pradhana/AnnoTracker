@@ -100,17 +100,30 @@ export default function WorkSessionPage() {
       // Migrate demo-employee-id records if user is logged in
       await migrateDemoUserRecords(userId);
 
+      // Check canonical session in Supabase for user & date
+      let canonicalSessionId: string | null = null;
+      if (user?.id) {
+        const { data: supaSess } = await supabase
+          .from("work_sessions")
+          .select("id")
+          .eq("user_id", user.id)
+          .eq("session_date", todayStr)
+          .maybeSingle();
+        if (supaSess?.id) canonicalSessionId = supaSess.id;
+      }
+
       // Check if session exists in Dexie IndexedDB for today
       let existingSession = await localDB.work_sessions
         .where("[user_id+session_date]")
         .equals([userId, todayStr])
         .first();
 
+      let activeSessionId = "";
+
       if (!existingSession) {
-        // Create new work session
-        const newSessionId = crypto.randomUUID();
+        activeSessionId = canonicalSessionId || crypto.randomUUID();
         const newSession: WorkSession = {
-          id: newSessionId,
+          id: activeSessionId,
           user_id: userId,
           session_date: todayStr,
           proof_type: null,
@@ -121,15 +134,64 @@ export default function WorkSessionPage() {
         };
 
         await localDB.work_sessions.add(newSession);
-        await addToSyncQueue("work_sessions", "INSERT", newSessionId, {
+        await addToSyncQueue("work_sessions", "INSERT", activeSessionId, {
           ...newSession,
         });
 
-        setCurrentSessionId(newSessionId);
+        setCurrentSessionId(activeSessionId);
         setCurrentSession(newSession);
       } else {
-        setCurrentSessionId(existingSession.id);
-        setCurrentSession(existingSession);
+        activeSessionId = existingSession.id;
+
+        if (canonicalSessionId && existingSession.id !== canonicalSessionId) {
+          const oldEntries = await localDB.task_entries.where("session_id").equals(existingSession.id).toArray();
+          for (const e of oldEntries) {
+            await localDB.task_entries.update(e.id, { session_id: canonicalSessionId });
+          }
+          await localDB.work_sessions.delete(existingSession.id);
+          activeSessionId = canonicalSessionId;
+          const updatedSess: WorkSession = {
+            id: canonicalSessionId,
+            user_id: userId,
+            session_date: todayStr,
+            proof_type: existingSession.proof_type,
+            proof_url: existingSession.proof_url,
+            proof_note: existingSession.proof_note,
+            sync_status: "synced",
+            created_at: existingSession.created_at,
+          };
+          await localDB.work_sessions.put(updatedSess);
+          setCurrentSession(updatedSess);
+        } else {
+          setCurrentSession(existingSession);
+        }
+        setCurrentSessionId(activeSessionId);
+      }
+
+      // Pull remote task_entries from Supabase to Dexie localDB for multi-device sync
+      if (user?.id && activeSessionId) {
+        const { data: remoteEntries } = await supabase
+          .from("task_entries")
+          .select("*")
+          .eq("session_id", activeSessionId);
+
+        if (remoteEntries && remoteEntries.length > 0) {
+          for (const rEntry of remoteEntries) {
+            const localExists = await localDB.task_entries.get(rEntry.id);
+            if (!localExists) {
+              await localDB.task_entries.put({
+                id: rEntry.id,
+                session_id: rEntry.session_id,
+                client_account_id: rEntry.client_account_id,
+                task_type_id: rEntry.task_type_id,
+                duration_seconds: rEntry.duration_seconds,
+                entry_order: rEntry.entry_order,
+                note: rEntry.note || null,
+                created_at: rEntry.created_at,
+              });
+            }
+          }
+        }
       }
 
       // Trigger automatic background sync
