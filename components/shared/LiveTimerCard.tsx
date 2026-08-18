@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { formatSecondsToTime, formatDecimalHours } from "@/lib/utils";
+import { formatSecondsToTime, formatDecimalHours, getWorkDate } from "@/lib/utils";
 
 interface LiveTimerCardProps {
   paidSecondsTotal: number;
@@ -31,7 +31,8 @@ export function LiveTimerCard({
   paidSecondsTotal,
   onApplyTimerToForm,
 }: LiveTimerCardProps) {
-  const todayStr = new Date().toISOString().split("T")[0];
+  // Work day: 07:00 WIB → 06:59 WIB next day (agency rule)
+  const todayStr = getWorkDate();
 
   const [activeSeconds, setActiveSeconds] = useState<number>(0);
   const [isRunning, setIsRunning] = useState<boolean>(false);

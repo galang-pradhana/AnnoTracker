@@ -1,4 +1,29 @@
 /**
+ * Returns the "work date" string (YYYY-MM-DD) based on agency rules:
+ * A work day starts at 07:00 WIB (UTC+7) and ends at 06:59 WIB the next day.
+ * Hours between 00:00–06:59 WIB are counted as the previous work day.
+ *
+ * @param date - Optional Date object (defaults to now)
+ * @returns YYYY-MM-DD string representing the correct work day
+ */
+export function getWorkDate(date: Date = new Date()): string {
+  // WIB = UTC+7, work day cutoff = 07:00 WIB
+  const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+  const WORK_DAY_START_HOUR = 7;
+
+  // Convert to WIB time
+  const wibTime = new Date(date.getTime() + WIB_OFFSET_MS);
+  const wibHour = wibTime.getUTCHours();
+
+  // If before 07:00 WIB, treat as the previous work day
+  if (wibHour < WORK_DAY_START_HOUR) {
+    wibTime.setUTCDate(wibTime.getUTCDate() - 1);
+  }
+
+  return wibTime.toISOString().split("T")[0];
+}
+
+/**
  * Format duration in seconds into HH:MM:SS or string representation
  */
 export function formatSecondsToTime(seconds: number): string {

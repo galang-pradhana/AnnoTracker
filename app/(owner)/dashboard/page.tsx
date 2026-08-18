@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { formatDecimalHours, formatRupiah } from "@/lib/utils";
+import { formatDecimalHours, formatRupiah, getWorkDate } from "@/lib/utils";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { AppLogo } from "@/components/shared/AppLogo";
 import {
@@ -120,8 +120,8 @@ interface CalendarDayData {
 export default function OwnerDashboardPage() {
   const router = useRouter();
 
-  // Stable date string for today
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+  // Work day: 07:00 WIB → 06:59 WIB next day (agency rule)
+  const todayStr = useMemo(() => getWorkDate(), []);
   const currentYear = useMemo(() => new Date().getFullYear(), []);
   const currentMonth = useMemo(() => new Date().getMonth(), []);
 
@@ -289,14 +289,14 @@ export default function OwnerDashboardPage() {
   // ── Derived: Filtered Account Stats (berdasarkan accountPeriod) ───────────
   const filteredAccountStats: (AccountStats & { taskCount: number })[] = useMemo(() => {
     const now = new Date();
-    const todayISO = now.toISOString().split("T")[0];
+    const todayISO = getWorkDate(now);
 
-    // Hitung start of week (Monday)
+    // Hitung start of week (Monday) berdasarkan work date
     const dowToday = now.getDay();
     const diffToMon = dowToday === 0 ? -6 : 1 - dowToday;
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() + diffToMon);
-    const weekStartISO = weekStart.toISOString().split("T")[0];
+    const weekStartISO = getWorkDate(weekStart);
 
     const filtered = monthSessions.filter(s => {
       if (accountPeriod === "today") return s.session_date === todayISO;
@@ -333,12 +333,12 @@ export default function OwnerDashboardPage() {
   // ── Helper: employee breakdown untuk akun tertentu, per filter aktif ────────
   const getAccountEmployeeBreakdown = (acc: AccountStats) => {
     const now = new Date();
-    const todayISO = now.toISOString().split("T")[0];
+    const todayISO = getWorkDate(now);
     const dowToday = now.getDay();
     const diffToMon = dowToday === 0 ? -6 : 1 - dowToday;
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() + diffToMon);
-    const weekStartISO = weekStart.toISOString().split("T")[0];
+    const weekStartISO = getWorkDate(weekStart);
 
     const filtered = monthSessions.filter(s => {
       if (accountPeriod === "today") return s.session_date === todayISO;

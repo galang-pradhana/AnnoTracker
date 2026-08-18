@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { localDB } from "./db";
+import { getWorkDate } from "@/lib/utils";
 import {
   markSyncSuccess,
   markSyncFailure,
@@ -15,7 +16,8 @@ export async function migrateDemoUserRecords(realUserId: string): Promise<void> 
   if (!realUserId || realUserId === "demo-employee-id") return;
 
   try {
-    const todayStr = new Date().toISOString().split("T")[0];
+    // Use getWorkDate() for agency work-day rule (07:00 WIB cutoff)
+    const todayStr = getWorkDate();
 
     // 1. Migrate demo-employee-id sessions to realUserId
     const demoSessions = await localDB.work_sessions
@@ -189,9 +191,10 @@ export async function processSyncQueue(): Promise<{
               payload.id = crypto.randomUUID();
             }
 
+            // Determine session_date using agency work-day rule (07:00 WIB cutoff)
             const entryDate = payload.created_at
-              ? String(payload.created_at).split("T")[0]
-              : new Date().toISOString().split("T")[0];
+              ? getWorkDate(new Date(String(payload.created_at)))
+              : getWorkDate();
 
             if (user?.id) {
               // Check if Supabase already has a canonical work_session for user & entryDate

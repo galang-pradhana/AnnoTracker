@@ -17,6 +17,7 @@ import { TaskEntryList } from "@/components/shared/TaskEntryList";
 import { LiveTimerCard } from "@/components/shared/LiveTimerCard";
 import { ProofUpload } from "@/components/shared/ProofUpload";
 import { ROUTES } from "@/constants";
+import { getWorkDate } from "@/lib/utils";
 import type {
   ClientAccount,
   TaskType,
@@ -42,7 +43,8 @@ const MOCK_TASK_TYPES: TaskType[] = [
 
 export default function WorkSessionPage() {
   const router = useRouter();
-  const todayStr = new Date().toISOString().split("T")[0];
+  // Work day: 07:00 WIB → 06:59 WIB next day (agency rule)
+  const todayStr = getWorkDate();
 
   // Client-side date rendering to prevent hydration mismatch
   const [formattedDate, setFormattedDate] = useState("");
