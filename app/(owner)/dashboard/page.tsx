@@ -116,6 +116,15 @@ interface CalendarDayData {
   sessions: WorkSessionWithEntries[];
 }
 
+interface LanguageStats {
+  language: string;
+  totalSeconds: number;
+  totalHours: number;
+  taskCount: number;
+  employeeSet: Set<string>;
+  accountSet: Set<string>;
+}
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 export default function OwnerDashboardPage() {
   const router = useRouter();
@@ -131,7 +140,7 @@ export default function OwnerDashboardPage() {
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [dateSessions, setDateSessions] = useState<WorkSessionWithEntries[]>([]);
   const [dateLoading, setDateLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"overview" | "calendar" | "employee" | "account" | "tasktype" | "daily">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "calendar" | "employee" | "account" | "language" | "tasktype" | "daily">("overview");
   const [payrollStatusMap, setPayrollStatusMap] = useState<Record<string, "paid" | "unpaid">>({});
 
   // Calendar State inside Dashboard
@@ -143,10 +152,15 @@ export default function OwnerDashboardPage() {
   const [accountPeriod, setAccountPeriod] = useState<"today" | "week" | "month">("month");
   const [selectedAccountDrill, setSelectedAccountDrill] = useState<AccountStats | null>(null);
 
+  // Language tab state — filter periode & side panel drill-down
+  const [languagePeriod, setLanguagePeriod] = useState<"today" | "week" | "month">("month");
+  const [selectedLanguageDrill, setSelectedLanguageDrill] = useState<LanguageStats | null>(null);
+
   // Employee drill-down modal state
   const [selectedEmployeeDrill, setSelectedEmployeeDrill] = useState<EmployeeStats | null>(null);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [expandedSessionAccounts, setExpandedSessionAccounts] = useState<Set<string>>(new Set());
+
 
 
 
@@ -373,6 +387,118 @@ export default function OwnerDashboardPage() {
     return Array.from(empMap.values()).sort((a, b) => b.seconds - a.seconds);
   };
 
+  // ── Derived: Filtered Language Stats (berdasarkan languagePeriod) ─────────
+  const filteredLanguageStats: LanguageStats[] = useMemo(() => {
+    const now = new Date();
+    const todayISO = getWorkDate(now);
+    const dowToday = now.getDay();
+    const diffToMon = dowToday === 0 ? -6 : 1 - dowToday;
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() + diffToMon);
+    const weekStartISO = getWorkDate(weekStart);
+
+    const filtered = monthSessions.filter((s) => {
+      if (languagePeriod === "today") return s.session_date === todayISO;
+      if (languagePeriod === "week") return s.session_date >= weekStartISO && s.session_date <= todayISO;
+      return true; // "month"
+    });
+
+    const langMap = new Map<string, LanguageStats>();
+    filtered.forEach((s) => {
+      (s.task_entries || []).forEach((e) => {
+        const langName = e.client_account?.language?.trim() || "Tanpa Bahasa / General";
+        const accName = e.client_account?.name;
+        const existing = langMap.get(langName);
+        if (existing) {
+          existing.totalSeconds += e.duration_seconds || 0;
+          existing.taskCount += 1;
+          existing.employeeSet.add(s.user_id);
+          if (accName) existing.accountSet.add(accName);
+        } else {
+          const accSet = new Set<string>();
+          if (accName) accSet.add(accName);
+          langMap.set(langName, {
+            language: langName,
+            totalSeconds: e.duration_seconds || 0,
+            totalHours: 0,
+            taskCount: 1,
+            employeeSet: new Set([s.user_id]),
+            accountSet: accSet,
+          });
+        }
+      });
+    });
+
+    return Array.from(langMap.values())
+      .map((l) => ({ ...l, totalHours: l.totalSeconds / 3600 }))
+      .sort((a, b) => b.totalSeconds - a.totalSeconds);
+  }, [monthSessions, languagePeriod]);
+
+  // ── Helper: Breakdown per akun & karyawan untuk bahasa tertentu ─────────────
+  const getLanguageBreakdown = (langStats: LanguageStats) => {
+    const now = new Date();
+    const todayISO = getWorkDate(now);
+    const dowToday = now.getDay();
+    const diffToMon = dowToday === 0 ? -6 : 1 - dowToday;
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() + diffToMon);
+    const weekStartISO = getWorkDate(weekStart);
+
+    const filtered = monthSessions.filter((s) => {
+      if (languagePeriod === "today") return s.session_date === todayISO;
+      if (languagePeriod === "week") return s.session_date >= weekStartISO && s.session_date <= todayISO;
+      return true;
+    });
+
+    const accountBreakdownMap = new Map<string, { name: string; seconds: number; taskCount: number; employees: Set<string> }>();
+    const employeeBreakdownMap = new Map<string, { name: string; seconds: number; taskCount: number }>();
+
+    filtered.forEach((s) => {
+      (s.task_entries || []).forEach((e) => {
+        const eLang = e.client_account?.language?.trim() || "Tanpa Bahasa / General";
+        if (eLang !== langStats.language) return;
+
+        // Account breakdown
+        const accId = e.client_account_id || "unknown";
+        const accName = e.client_account?.name || "Lainnya";
+        const existingAcc = accountBreakdownMap.get(accId);
+        if (existingAcc) {
+          existingAcc.seconds += e.duration_seconds || 0;
+          existingAcc.taskCount += 1;
+          existingAcc.employees.add(s.user_id);
+        } else {
+          accountBreakdownMap.set(accId, {
+            name: accName,
+            seconds: e.duration_seconds || 0,
+            taskCount: 1,
+            employees: new Set([s.user_id]),
+          });
+        }
+
+        // Employee breakdown
+        const empId = s.user_id;
+        const empName = s.user?.full_name || "Karyawan";
+        const existingEmp = employeeBreakdownMap.get(empId);
+        if (existingEmp) {
+          existingEmp.seconds += e.duration_seconds || 0;
+          existingEmp.taskCount += 1;
+        } else {
+          employeeBreakdownMap.set(empId, {
+            name: empName,
+            seconds: e.duration_seconds || 0,
+            taskCount: 1,
+          });
+        }
+      });
+    });
+
+    return {
+      accounts: Array.from(accountBreakdownMap.values()).sort((a, b) => b.seconds - a.seconds),
+      employees: Array.from(employeeBreakdownMap.values()).sort((a, b) => b.seconds - a.seconds),
+    };
+  };
+
+
 
 
   // ── Derived: Task Type Stats ───────────────────────────────────────────────
@@ -467,9 +593,11 @@ export default function OwnerDashboardPage() {
               ["calendar", "Kalender Tim"],
               ["employee", "Per Karyawan"],
               ["account", "Per Akun Klien"],
+              ["language", "Per Bahasa"],
               ["tasktype", "Per Jenis Task"],
               ["daily", "Rekap Harian"],
             ] as const).map(([key, label]) => {
+
               const isActive = activeTab === key;
               return (
                 <button
@@ -1160,8 +1288,200 @@ export default function OwnerDashboardPage() {
         )}
 
         {/* ══════════════════════════════════════════════════════════════════════
+            TAB: PER BAHASA
+        ══════════════════════════════════════════════════════════════════════ */}
+        {activeTab === "language" && (
+          <div className="relative space-y-4">
+            <div className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)] shadow-xs overflow-hidden">
+              {/* Header + Filter Periode */}
+              <div className="px-6 py-4 border-b border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-bold text-[var(--text-primary)]">Total Jam & Pengerjaan per Bahasa</h2>
+                  <p className="text-[11px] text-[var(--text-secondary)]">
+                    Rekap waktu & aktivitas anotasi berdasarkan bahasa akun klien · Klik baris untuk detail
+                  </p>
+                </div>
+                {/* Periode toggle */}
+                <div className="flex gap-1 p-1 bg-[var(--bg-surface-alt)] rounded-xl border border-[var(--border)]">
+                  {(["today", "week", "month"] as const).map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => { setLanguagePeriod(p); setSelectedLanguageDrill(null); }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        languagePeriod === p
+                          ? "bg-[var(--primary)] text-white shadow-sm"
+                          : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                      }`}
+                    >
+                      {p === "today" ? "Hari Ini" : p === "week" ? "Minggu Ini" : "Bulan Ini"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {isLoading ? (
+                <div className="py-12 text-center text-xs text-[var(--text-secondary)]">Memuat data...</div>
+              ) : filteredLanguageStats.length === 0 ? (
+                <EmptyState
+                  icon="🌐"
+                  title="Belum Ada Data Bahasa"
+                  description={`Belum ada pengerjaan task untuk bahasa tertentu pada ${languagePeriod === "today" ? "hari ini" : languagePeriod === "week" ? "minggu ini" : "bulan ini"}.`}
+                />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-[var(--bg-surface-alt)] border-b border-[var(--border)]">
+                      <tr className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                        <th className="px-6 py-3">Bahasa</th>
+                        <th className="px-4 py-3">Total Jam</th>
+                        <th className="px-4 py-3">Total Task</th>
+                        <th className="px-4 py-3">Akun Terlibat</th>
+                        <th className="px-4 py-3">Employee Terlibat</th>
+                        <th className="px-4 py-3">% dari Total Tim</th>
+                        <th className="px-4 py-3 text-right">Detail</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--border)]">
+                      {filteredLanguageStats.map((lang) => {
+                        const totalFiltered = filteredLanguageStats.reduce((s, l) => s + l.totalHours, 0);
+                        const pct = totalFiltered > 0 ? (lang.totalHours / totalFiltered) * 100 : 0;
+                        const isSelected = selectedLanguageDrill?.language === lang.language;
+
+                        return (
+                          <tr
+                            key={lang.language}
+                            onClick={() => setSelectedLanguageDrill(isSelected ? null : lang)}
+                            className={`cursor-pointer transition-colors ${
+                              isSelected
+                                ? "bg-[var(--primary-soft)] border-l-2 border-[var(--primary)]"
+                                : "hover:bg-[var(--bg-surface-alt)]/50"
+                            }`}
+                          >
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <span className="text-base">🌐</span>
+                                <p className="font-bold text-[var(--text-primary)]">{lang.language}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-4">
+                              <p className="font-bold text-[var(--primary)] text-base">{formatDecimalHours(lang.totalHours)}</p>
+                              <p className="text-[10px] text-[var(--text-secondary)]">{lang.totalSeconds.toLocaleString("id")} dtk</p>
+                            </td>
+                            <td className="px-4 py-4">
+                              <p className="font-semibold text-[var(--text-primary)]">{lang.taskCount}</p>
+                              <p className="text-[10px] text-[var(--text-secondary)]">entri</p>
+                            </td>
+                            <td className="px-4 py-4">
+                              <p className="font-semibold text-[var(--text-primary)]">{lang.accountSet.size}</p>
+                              <p className="text-[10px] text-[var(--text-secondary)]">akun</p>
+                            </td>
+                            <td className="px-4 py-4">
+                              <p className="font-semibold text-[var(--text-primary)]">{lang.employeeSet.size}</p>
+                              <p className="text-[10px] text-[var(--text-secondary)]">karyawan</p>
+                            </td>
+                            <td className="px-4 py-4">
+                              <div className="space-y-1">
+                                <p className="text-xs font-bold text-[var(--text-primary)]">{pct.toFixed(1)}%</p>
+                                <MiniBar value={lang.totalHours} max={filteredLanguageStats[0]?.totalHours ?? 1} color="bg-[var(--primary)]" />
+                              </div>
+                            </td>
+                            <td className="px-4 py-4 text-right">
+                              <span className="text-xs font-bold text-[var(--primary)]">
+                                {isSelected ? "✕ Tutup" : "Detail →"}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* ── Side Panel Drill-down Per Bahasa ──────────────────────────── */}
+            {selectedLanguageDrill && (() => {
+              const breakdown = getLanguageBreakdown(selectedLanguageDrill);
+              return (
+                <div className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--primary)]/30 shadow-md overflow-hidden animate-in slide-in-from-bottom-2 duration-200">
+                  {/* Panel Header */}
+                  <div className="px-6 py-4 border-b border-[var(--border)] bg-[var(--primary-soft)] flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-[var(--primary)] flex items-center gap-1.5">
+                        <span>🌐 Bahasa: {selectedLanguageDrill.language}</span>
+                      </h3>
+                      <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                        Breakdown akun & karyawan ·{" "}
+                        {languagePeriod === "today" ? "Hari Ini" : languagePeriod === "week" ? "Minggu Ini" : "Bulan Ini"}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedLanguageDrill(null)}
+                      className="w-7 h-7 rounded-full bg-[var(--bg-surface)] border border-[var(--border)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-xs cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  {/* Panel Body: Two Columns (Akun Klien & Karyawan) */}
+                  <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Column 1: Akun Klien dalam Bahasa ini */}
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
+                        <span>🏢 Akun Klien ({breakdown.accounts.length})</span>
+                      </h4>
+                      {breakdown.accounts.length === 0 ? (
+                        <p className="text-xs text-[var(--text-secondary)] italic">Tidak ada akun.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {breakdown.accounts.map((acc) => (
+                            <div key={acc.name} className="p-3.5 rounded-xl bg-[var(--bg-surface-alt)] border border-[var(--border)] flex items-center justify-between">
+                              <div>
+                                <p className="text-xs font-bold text-[var(--text-primary)]">{acc.name}</p>
+                                <p className="text-[10px] text-[var(--text-secondary)]">{acc.taskCount} task · {acc.employees.size} karyawan</p>
+                              </div>
+                              <span className="text-xs font-black text-[var(--accent-teal)]">{formatDecimalHours(acc.seconds / 3600)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Column 2: Karyawan yang mengerjakan Bahasa ini */}
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
+                        <span>👥 Karyawan Terlibat ({breakdown.employees.length})</span>
+                      </h4>
+                      {breakdown.employees.length === 0 ? (
+                        <p className="text-xs text-[var(--text-secondary)] italic">Tidak ada karyawan.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {breakdown.employees.map((emp) => {
+                            const pct = selectedLanguageDrill.totalSeconds > 0 ? (emp.seconds / selectedLanguageDrill.totalSeconds) * 100 : 0;
+                            return (
+                              <div key={emp.name} className="p-3.5 rounded-xl bg-[var(--bg-surface-alt)] border border-[var(--border)] flex items-center justify-between">
+                                <div>
+                                  <p className="text-xs font-bold text-[var(--text-primary)]">{emp.name}</p>
+                                  <p className="text-[10px] text-[var(--text-secondary)]">{emp.taskCount} task · {pct.toFixed(0)}% dari total bahasa</p>
+                                </div>
+                                <span className="text-xs font-black text-[var(--primary)]">{formatDecimalHours(emp.seconds / 3600)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════════
             TAB: PER JENIS TASK
         ══════════════════════════════════════════════════════════════════════ */}
+
         {activeTab === "tasktype" && (
           <div className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)] shadow-xs overflow-hidden">
             <div className="px-6 py-4 border-b border-[var(--border)]">
