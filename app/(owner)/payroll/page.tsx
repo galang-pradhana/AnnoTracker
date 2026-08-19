@@ -71,11 +71,18 @@ function getRate(hours: number, tiers: TierLike[]): number {
 interface DaySession { date: string; taskEntries: { duration_seconds: number }[]; }
 
 function computePayroll(
-  sessions: DaySession[], tiers: TierLike[], bonusThreshold: number, bonusAmount: number
+  sessions: DaySession[],
+  tiers: TierLike[],
+  bonusThreshold: number,
+  bonusAmount: number,
+  userCustomRates: { rate_per_hour: number; effective_from: string }[] = []
 ) {
   let basePay = 0, totalHours = 0, bonusPay = 0;
   const weeklyDetails: { weekLabel: string; hours: number; bonus: number }[] = [];
   const MONTH = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+
+  // Sort user custom rates descending by effective_from
+  const sortedCustomRates = [...userCustomRates].sort((a, b) => b.effective_from.localeCompare(a.effective_from));
 
   const weekMap = new Map<string, DaySession[]>();
   for (const s of sessions) {
@@ -95,7 +102,17 @@ function computePayroll(
       const secs = s.taskEntries.reduce((sum, e) => sum + (e.duration_seconds || 0), 0);
       const hrs = secs / 3600;
       weekHours += hrs; totalHours += hrs;
-      basePay += Math.round(hrs * getRate(hrs, tiers));
+
+      // Check if employee has a custom rate applicable on or before this session date
+      const activeCustomRate = sortedCustomRates.find((r) => r.effective_from <= s.date);
+
+      if (activeCustomRate) {
+        // Flat rate per hour (fix rate, e.g. Rp 15.000/jam, no tier progression)
+        basePay += Math.round(hrs * activeCustomRate.rate_per_hour);
+      } else {
+        // Global daily tier rate (progressive 10k -> 11k -> 12k)
+        basePay += Math.round(hrs * getRate(hrs, tiers));
+      }
     }
     const weekBonus = weekHours >= bonusThreshold ? bonusAmount : 0;
     bonusPay += weekBonus;
@@ -107,6 +124,7 @@ function computePayroll(
 
   return { basePay, bonusPay, totalHours, weeklyDetails };
 }
+
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface ExtendedPayrollResult extends PayrollResult {
@@ -147,7 +165,7 @@ export default function PayrollPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push(ROUTES.LOGIN); return; }
 
-      const [empRes, sessionsRes, tiersRes, bonusRes, payrollRecordsRes] = await Promise.all([
+      const [empRes, sessionsRes, tiersRes, bonusRes, payrollRecordsRes, userRatesRes] = await Promise.all([
         supabase.from("users").select("*").eq("role", "employee").order("full_name"),
         supabase.from("work_sessions").select("*, task_entries(*)")
           .gte("session_date", startDate).lte("session_date", endDate),
@@ -155,10 +173,12 @@ export default function PayrollPage() {
         supabase.from("bonus_rules").select("*").order("effective_from", { ascending: false }),
         supabase.from("payroll_records").select("*")
           .gte("period_start", startDate).lte("period_end", endDate),
+        supabase.from("user_salary_rates").select("*").order("effective_from", { ascending: false }),
       ]);
 
       const employees: User[] = empRes.data || [];
       const sessions = sessionsRes.data || [];
+      const allUserRates = userRatesRes.data || [];
 
       const allTiers: SalaryTier[] = tiersRes.data || [];
       let activeTiers: TierLike[] = DEFAULT_SALARY_TIERS;
@@ -181,9 +201,11 @@ export default function PayrollPage() {
 
       const results: ExtendedPayrollResult[] = employees.map((emp) => {
         const empSessions = sessions.filter(s => s.user_id === emp.id);
+        const empRates = allUserRates.filter(r => r.user_id === emp.id);
         const daySessions: DaySession[] = empSessions.map(s => ({ date: s.session_date, taskEntries: s.task_entries || [] }));
-        const { basePay, bonusPay, totalHours, weeklyDetails } = computePayroll(daySessions, activeTiers, bonusThreshold, bonusAmount);
+        const { basePay, bonusPay, totalHours, weeklyDetails } = computePayroll(daySessions, activeTiers, bonusThreshold, bonusAmount, empRates);
         const rec = existingRecords[emp.id];
+
         return {
           user: emp,
           period_start: startDate,

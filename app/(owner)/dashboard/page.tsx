@@ -143,6 +143,13 @@ export default function OwnerDashboardPage() {
   const [accountPeriod, setAccountPeriod] = useState<"today" | "week" | "month">("month");
   const [selectedAccountDrill, setSelectedAccountDrill] = useState<AccountStats | null>(null);
 
+  // Employee drill-down modal state
+  const [selectedEmployeeDrill, setSelectedEmployeeDrill] = useState<EmployeeStats | null>(null);
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [expandedSessionAccounts, setExpandedSessionAccounts] = useState<Set<string>>(new Set());
+
+
+
   // Dashboard calendar modal grouping state
   const [calDashGroupMode, setCalDashGroupMode] = useState<"account" | "employee">("account");
   const [collapsedDashCalGroups, setCollapsedDashCalGroups] = useState<Set<string>>(new Set());
@@ -669,7 +676,11 @@ export default function OwnerDashboardPage() {
                 ) : (
                   <div className="space-y-3.5">
                     {employeeStats.slice(0, 5).map((stat, idx) => (
-                      <div key={stat.user.id} className="flex items-center gap-3">
+                      <div
+                        key={stat.user.id}
+                        onClick={() => setSelectedEmployeeDrill(stat)}
+                        className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-[var(--bg-surface-alt)] cursor-pointer transition-colors"
+                      >
                         <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
                           idx === 0 ? "bg-[var(--primary-soft)] text-[var(--primary)]" :
                           idx === 1 ? "bg-[var(--bg-surface-alt)] text-[var(--text-primary)]" :
@@ -688,6 +699,7 @@ export default function OwnerDashboardPage() {
                         )}
                       </div>
                     ))}
+
                   </div>
                 )}
               </div>
@@ -840,7 +852,9 @@ export default function OwnerDashboardPage() {
           <div className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)] shadow-xs overflow-hidden">
             <div className="px-6 py-4 border-b border-[var(--border)]">
               <h2 className="text-sm font-bold text-[var(--text-primary)]">Rekap Bulanan Per Karyawan</h2>
-              <p className="text-[11px] text-[var(--text-secondary)]">{MONTH_NAMES[currentMonth]} {currentYear} · diurutkan terbanyak</p>
+              <p className="text-[11px] text-[var(--text-secondary)]">
+                {MONTH_NAMES[currentMonth]} {currentYear} · Klik baris karyawan untuk melihat rincian jam kerja, kapan saja, dan akun apa saja
+              </p>
             </div>
             {isLoading ? (
               <div className="py-12 text-center text-xs text-[var(--text-secondary)]">Memuat data...</div>
@@ -863,11 +877,16 @@ export default function OwnerDashboardPage() {
                       <th className="px-4 py-3">Est. Gaji</th>
                       <th className="px-4 py-3">Bonus</th>
                       <th className="px-4 py-3">Status Hari Ini</th>
+                      <th className="px-4 py-3 text-right">Detail</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--border)]">
                     {employeeStats.map((stat, idx) => (
-                      <tr key={stat.user.id} className="hover:bg-[var(--bg-surface-alt)]/50 transition-colors">
+                      <tr
+                        key={stat.user.id}
+                        onClick={() => setSelectedEmployeeDrill(stat)}
+                        className="hover:bg-[var(--bg-surface-alt)]/80 cursor-pointer transition-colors group"
+                      >
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-2.5">
                             <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold ${
@@ -877,7 +896,7 @@ export default function OwnerDashboardPage() {
                               "bg-[var(--bg-surface-alt)] text-[var(--text-secondary)]"
                             }`}>{idx + 1}</span>
                             <div>
-                              <p className="font-semibold text-[var(--text-primary)]">{stat.user.full_name}</p>
+                              <p className="font-bold text-[var(--text-primary)] group-hover:text-[var(--primary)] transition-colors">{stat.user.full_name}</p>
                               <div className="mt-1 w-24">
                                 <MiniBar value={stat.totalHours} max={maxEmpHours} color="bg-[var(--primary)]" />
                               </div>
@@ -936,6 +955,11 @@ export default function OwnerDashboardPage() {
                             </span>
                           )}
                         </td>
+                        <td className="px-4 py-4 text-right">
+                          <span className="text-xs font-bold text-[var(--primary)] group-hover:underline">
+                            Lihat Detail →
+                          </span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -944,6 +968,7 @@ export default function OwnerDashboardPage() {
             )}
           </div>
         )}
+
 
         {/* ══════════════════════════════════════════════════════════════════════
             TAB: PER AKUN KLIEN
@@ -1452,6 +1477,344 @@ export default function OwnerDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* ── Employee Detail Modal (Drill-Down) ───────────────────────────── */}
+      {selectedEmployeeDrill && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs px-4 py-6 overflow-y-auto"
+          onClick={() => setSelectedEmployeeDrill(null)}
+        >
+          <div
+            className="w-full max-w-3xl bg-[var(--bg-surface)] text-[var(--text-primary)] rounded-3xl border border-[var(--border)] shadow-2xl overflow-hidden my-auto max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-6 border-b border-[var(--border)] bg-[var(--bg-surface-alt)] flex items-start justify-between">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-[var(--primary-soft)] text-[var(--primary)] font-black text-lg flex items-center justify-center border border-[var(--primary)]/30 shrink-0 shadow-xs">
+                  {selectedEmployeeDrill.user.full_name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-lg font-extrabold text-[var(--text-primary)] tracking-tight">
+                      {selectedEmployeeDrill.user.full_name}
+                    </h3>
+                    {selectedEmployeeDrill.loggedToday ? (
+                      <span className="text-[10px] font-bold text-[var(--accent-teal)] bg-[var(--accent-teal-soft)] px-2.5 py-0.5 rounded-full border border-[var(--accent-teal)]/30 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-teal)]" />
+                        Sudah Input Hari Ini
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-0.5 rounded-full border border-amber-300/30 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                        Belum Input Hari Ini
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                    Detail aktivitas & jam kerja bulan {MONTH_NAMES[currentMonth]} {currentYear}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedEmployeeDrill(null)}
+                className="w-8 h-8 rounded-full bg-[var(--bg-surface)] hover:bg-[var(--border)] flex items-center justify-center text-[var(--text-secondary)] hover:text-[var(--text-primary)] text-sm transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* KPI Summary Row */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-5 border-b border-[var(--border)] bg-[var(--bg-surface)]">
+              <div className="p-3.5 rounded-xl bg-[var(--bg-surface-alt)] border border-[var(--border)]">
+                <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Total Jam Kerja</p>
+                <p className="text-xl font-black text-[var(--primary)] mt-0.5">{formatDecimalHours(selectedEmployeeDrill.totalHours)}</p>
+              </div>
+              <div className="p-3.5 rounded-xl bg-[var(--bg-surface-alt)] border border-[var(--border)]">
+                <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Hari Kerja</p>
+                <p className="text-xl font-black text-[var(--text-primary)] mt-0.5">{selectedEmployeeDrill.workDays} Hari</p>
+              </div>
+              <div className="p-3.5 rounded-xl bg-[var(--bg-surface-alt)] border border-[var(--border)]">
+                <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Jumlah Task Entri</p>
+                <p className="text-xl font-black text-[var(--text-primary)] mt-0.5">{selectedEmployeeDrill.taskCount} Task</p>
+              </div>
+              <div className="p-3.5 rounded-xl bg-[var(--bg-surface-alt)] border border-[var(--border)]">
+                <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Est. Gaji Bulan Ini</p>
+                <p className="text-xl font-black text-[var(--accent-teal)] mt-0.5">{formatRupiah(selectedEmployeeDrill.estimatedPay)}</p>
+              </div>
+            </div>
+
+            {/* Modal Body Scrollable */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1">
+              {/* Section 1: Breakdown per Akun Klien (Di Akun Apa Aja) */}
+              <div>
+                <h4 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider mb-3 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span>🏢 Akun Klien Dikerjakan</span>
+                    <span className="text-[10px] text-[var(--text-secondary)] font-normal">(Bulan Ini)</span>
+                  </span>
+                </h4>
+
+                {(() => {
+                  const empSessions = monthSessions.filter((s) => s.user_id === selectedEmployeeDrill.user.id);
+                  const accMap = new Map<string, { name: string; lang?: string | null; seconds: number; taskCount: number }>();
+                  for (const s of empSessions) {
+                    for (const e of s.task_entries || []) {
+                      const key = e.client_account_id || "unknown";
+                      const name = e.client_account?.name || "Lainnya";
+                      const lang = e.client_account?.language;
+                      const existing = accMap.get(key);
+                      if (existing) {
+                        existing.seconds += e.duration_seconds || 0;
+                        existing.taskCount += 1;
+                      } else {
+                        accMap.set(key, { name, lang, seconds: e.duration_seconds || 0, taskCount: 1 });
+                      }
+                    }
+                  }
+                  const accList = Array.from(accMap.values()).sort((a, b) => b.seconds - a.seconds);
+
+                  if (accList.length === 0) {
+                    return <p className="text-xs text-[var(--text-secondary)] italic">Belum ada pengerjaan akun klien bulan ini.</p>;
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {accList.map((acc) => {
+                        const hrs = acc.seconds / 3600;
+                        const pct = selectedEmployeeDrill.totalHours > 0 ? (hrs / selectedEmployeeDrill.totalHours) * 100 : 0;
+                        return (
+                          <div key={acc.name} className="p-3.5 rounded-xl bg-[var(--bg-surface-alt)] border border-[var(--border)] flex items-center justify-between">
+                            <div className="min-w-0 pr-2">
+                              <p className="text-xs font-bold text-[var(--text-primary)] truncate">
+                                {acc.name}
+                                {acc.lang && <span className="ml-1 text-[10px] text-[var(--text-secondary)] font-normal">({acc.lang})</span>}
+                              </p>
+                              <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">{acc.taskCount} task entri · {pct.toFixed(0)}% dari total jam</p>
+                            </div>
+                            <span className="text-xs font-black text-[var(--accent-teal)] shrink-0">{formatDecimalHours(hrs)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Section 2: Riwayat Hari Kerja & Jam (Grouped by Date -> Account -> Tasks) */}
+              <div>
+                <h4 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider mb-3 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span>📅 Riwayat Hari Kerja & Akun Klien</span>
+                    <span className="text-[10px] text-[var(--text-secondary)] font-normal">(Klik hari / akun untuk detail)</span>
+                  </span>
+                </h4>
+
+                {(() => {
+                  const empSessions = monthSessions.filter((s) => s.user_id === selectedEmployeeDrill.user.id);
+
+                  if (empSessions.length === 0) {
+                    return <p className="text-xs text-[var(--text-secondary)] italic">Belum ada riwayat sesi kerja bulan ini.</p>;
+                  }
+
+                  // 1. Group all sessions by session_date to avoid duplicate date headers in UI
+                  const dateGroupMap = new Map<
+                    string,
+                    {
+                      sessionDate: string;
+                      totalSeconds: number;
+                      entries: typeof empSessions[0]["task_entries"];
+                    }
+                  >();
+
+                  for (const s of empSessions) {
+                    const dateKey = s.session_date;
+                    const existing = dateGroupMap.get(dateKey);
+                    const sessionEntries = s.task_entries || [];
+                    const sessionSecs = sessionEntries.reduce((sum, e) => sum + (e.duration_seconds || 0), 0);
+
+                    if (existing) {
+                      existing.totalSeconds += sessionSecs;
+                      existing.entries.push(...sessionEntries);
+                    } else {
+                      dateGroupMap.set(dateKey, {
+                        sessionDate: dateKey,
+                        totalSeconds: sessionSecs,
+                        entries: [...sessionEntries],
+                      });
+                    }
+                  }
+
+                  const sortedDateGroups = Array.from(dateGroupMap.values()).sort((a, b) =>
+                    b.sessionDate.localeCompare(a.sessionDate)
+                  );
+
+                  return (
+                    <div className="space-y-3">
+                      {sortedDateGroups.map((dateGrp) => {
+                        const dateObj = new Date(dateGrp.sessionDate + "T12:00:00+07:00");
+                        const dateFmt = dateObj.toLocaleDateString("id-ID", {
+                          weekday: "long",
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        });
+
+                        // Group entries by client_account
+                        const accountGroupsMap = new Map<
+                          string,
+                          {
+                            accountKey: string;
+                            accountName: string;
+                            accountLang?: string | null;
+                            totalSeconds: number;
+                            entries: typeof dateGrp.entries;
+                          }
+                        >();
+
+                        for (const entry of dateGrp.entries) {
+                          const key = entry.client_account_id || "unknown";
+                          const name = entry.client_account?.name || "Lainnya";
+                          const lang = entry.client_account?.language;
+                          const existing = accountGroupsMap.get(key);
+                          if (existing) {
+                            existing.totalSeconds += entry.duration_seconds || 0;
+                            existing.entries.push(entry);
+                          } else {
+                            accountGroupsMap.set(key, {
+                              accountKey: key,
+                              accountName: name,
+                              accountLang: lang,
+                              totalSeconds: entry.duration_seconds || 0,
+                              entries: [entry],
+                            });
+                          }
+                        }
+
+                        const accountGroups = Array.from(accountGroupsMap.values()).sort((a, b) => b.totalSeconds - a.totalSeconds);
+                        const isDateOpen = expandedDate === dateGrp.sessionDate;
+
+                        return (
+                          <div key={dateGrp.sessionDate} className="border border-[var(--border)] rounded-2xl overflow-hidden bg-[var(--bg-surface)] shadow-xs transition-all">
+                            {/* Level 1 Header: Date Accordion */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setExpandedDate((prev) => (prev === dateGrp.sessionDate ? null : dateGrp.sessionDate));
+                              }}
+                              className="w-full px-4 py-3.5 bg-[var(--bg-surface-alt)] hover:bg-[var(--bg-surface-alt)]/80 flex items-center justify-between transition-colors cursor-pointer text-left"
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs text-[var(--text-secondary)] font-bold">{isDateOpen ? "▾" : "▸"}</span>
+                                <div>
+                                  <p className="text-xs font-extrabold text-[var(--text-primary)]">{dateFmt}</p>
+                                  <p className="text-[10px] text-[var(--text-secondary)]">
+                                    {accountGroups.length} akun klien · {dateGrp.entries.length} total task entri
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-black text-[var(--primary)]">{formatDecimalHours(dateGrp.totalSeconds / 3600)}</span>
+                              </div>
+                            </button>
+
+                            {/* Level 1 Body */}
+                            {isDateOpen && (
+                              <div className="p-3 space-y-2.5 bg-[var(--bg-surface)]/60 border-t border-[var(--border)]">
+                                {accountGroups.length === 0 ? (
+                                  <p className="text-[11px] text-[var(--text-secondary)] italic p-2">Tidak ada entri task pada hari ini.</p>
+                                ) : (
+                                  accountGroups.map((grp) => {
+                                    const accGroupKey = `${dateGrp.sessionDate}_${grp.accountKey}`;
+                                    const isAccOpen = expandedSessionAccounts.has(accGroupKey);
+
+                                    return (
+                                      <div key={accGroupKey} className="border border-[var(--border)] rounded-xl overflow-hidden bg-[var(--bg-surface-alt)]/40">
+                                        {/* Level 2 Header: Client Account Group */}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setExpandedSessionAccounts((prev) => {
+                                              const next = new Set(prev);
+                                              if (next.has(accGroupKey)) next.delete(accGroupKey);
+                                              else next.add(accGroupKey);
+                                              return next;
+                                            });
+                                          }}
+                                          className="w-full px-3.5 py-2.5 flex items-center justify-between hover:bg-[var(--bg-surface-alt)] transition-colors cursor-pointer text-left"
+                                        >
+                                          <div className="flex items-center gap-2.5 min-w-0">
+                                            <span className="text-xs text-[var(--text-secondary)] font-bold">{isAccOpen ? "▾" : "▸"}</span>
+                                            <div className="min-w-0">
+                                              <p className="text-xs font-bold text-[var(--text-primary)] truncate">
+                                                🏢 {grp.accountName}
+                                                {grp.accountLang && (
+                                                  <span className="ml-1 text-[10px] text-[var(--text-secondary)] font-normal">
+                                                    ({grp.accountLang})
+                                                  </span>
+                                                )}
+                                              </p>
+                                              <p className="text-[10px] text-[var(--text-secondary)]">
+                                                {grp.entries.length} task entri · Klik untuk {isAccOpen ? "sembunyikan" : "lihat rincian"}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          <span className="text-xs font-extrabold text-[var(--accent-teal)] shrink-0 ml-2">
+                                            {formatDecimalHours(grp.totalSeconds / 3600)}
+                                          </span>
+                                        </button>
+
+                                        {/* Level 2 Body: Individual Task Entries */}
+                                        {isAccOpen && (
+                                          <div className="px-3.5 py-2 border-t border-[var(--border)] bg-[var(--bg-surface)] divide-y divide-[var(--border)]">
+                                            {grp.entries.map((e, idx) => (
+                                              <div key={e.id || idx} className="py-2 first:pt-1 last:pb-1 flex items-start justify-between gap-3">
+                                                <div className="min-w-0 flex-1">
+                                                  <div className="flex items-center gap-2 flex-wrap">
+                                                    {e.task_type?.name && (
+                                                      <span className="text-[10px] font-semibold text-[var(--accent-teal)] bg-[var(--accent-teal-soft)] px-2 py-0.5 rounded-md border border-[var(--accent-teal)]/30">
+                                                        {e.task_type.name}
+                                                      </span>
+                                                    )}
+                                                    <span className="text-[10px] text-[var(--text-secondary)] font-mono">
+                                                      #{(e.entry_order || idx + 1)}
+                                                    </span>
+                                                  </div>
+                                                  {e.note && (
+                                                    <p className="text-[10px] text-[var(--text-secondary)] mt-1 italic font-mono bg-[var(--bg-surface-alt)]/60 px-2 py-1 rounded border border-[var(--border)] break-all">
+                                                      "{e.note}"
+                                                    </p>
+                                                  )}
+                                                </div>
+                                                <span className="text-xs font-bold text-[var(--text-primary)] shrink-0">
+                                                  {formatDecimalHours((e.duration_seconds || 0) / 3600)}
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

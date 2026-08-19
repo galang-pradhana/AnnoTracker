@@ -166,8 +166,10 @@ export async function processSyncQueue(): Promise<{
       "tt-5": realTaskTypes.find((t) => t.name.toLowerCase().includes("audio"))?.id || realTaskTypes[0]?.id,
     };
 
-    // Cache for valid session UUID for today
-    let validSessionId: string | null = null;
+    // Cache session UUID per work-date (YYYY-MM-DD) to avoid cross-date contamination.
+    // Bug fix: a single validSessionId caused entries from day N to be assigned
+    // to the session of day N+1 when synced the next morning after being offline.
+    const sessionIdByDate = new Map<string, string>();
 
     for (const item of pendingItems) {
       try {
@@ -182,7 +184,10 @@ export async function processSyncQueue(): Promise<{
             if (user?.id) {
               payload.user_id = user.id;
             }
-            validSessionId = String(payload.id);
+            // Cache this session ID keyed by its session_date
+            if (payload.session_date && typeof payload.session_date === "string") {
+              sessionIdByDate.set(payload.session_date, String(payload.id));
+            }
           }
 
           // Sanitize task_entries
@@ -197,6 +202,9 @@ export async function processSyncQueue(): Promise<{
               : getWorkDate();
 
             if (user?.id) {
+              // Check if we already know the session ID for this work-date (from prior iterations)
+              const cachedSessionId = sessionIdByDate.get(entryDate);
+
               // Check if Supabase already has a canonical work_session for user & entryDate
               const { data: sessData } = await supabase
                 .from("work_sessions")
@@ -206,21 +214,27 @@ export async function processSyncQueue(): Promise<{
                 .maybeSingle();
 
               if (sessData?.id && isValidUUID(sessData.id)) {
+                // Canonical session already exists in Supabase for this exact date
                 payload.session_id = sessData.id;
-                validSessionId = sessData.id;
+                sessionIdByDate.set(entryDate, sessData.id);
                 // Update local task_entry in Dexie DB as well to keep foreign key consistent
                 await localDB.task_entries.update(item.record_id, { session_id: sessData.id }).catch(() => {});
               } else {
-                // Ensure work_session exists in Supabase for this date before inserting task_entry
-                const sessIdToUse = (payload.session_id && isValidUUID(String(payload.session_id)))
-                  ? String(payload.session_id)
-                  : (validSessionId && isValidUUID(validSessionId)) ? validSessionId : crypto.randomUUID();
+                // No session exists yet for this entryDate.
+                // IMPORTANT: Use cached ID for this specific date, or the payload's own session_id
+                // if it is valid — but NEVER fallback to a cached ID from a DIFFERENT date.
+                const sessIdToUse =
+                  (payload.session_id && isValidUUID(String(payload.session_id)))
+                    ? String(payload.session_id)
+                    : (cachedSessionId && isValidUUID(cachedSessionId))
+                      ? cachedSessionId
+                      : crypto.randomUUID(); // Fresh UUID scoped to entryDate only
 
-                await supabase.from("work_sessions").upsert(
+                const { error: upsertSessErr } = await supabase.from("work_sessions").upsert(
                   {
                     id: sessIdToUse,
                     user_id: user.id,
-                    session_date: entryDate,
+                    session_date: entryDate, // Always use the entry's actual work-date
                     proof_type: null,
                     proof_url: null,
                     proof_note: null,
@@ -229,8 +243,26 @@ export async function processSyncQueue(): Promise<{
                   },
                   { onConflict: "id" }
                 );
-                payload.session_id = sessIdToUse;
-                validSessionId = sessIdToUse;
+
+                if (!upsertSessErr) {
+                  // Cache keyed by entryDate so future entries on the same date reuse it
+                  sessionIdByDate.set(entryDate, sessIdToUse);
+                  payload.session_id = sessIdToUse;
+                } else {
+                  // If upsert failed due to unique_user_session_date conflict, fetch the real ID
+                  const { data: conflictSess } = await supabase
+                    .from("work_sessions")
+                    .select("id")
+                    .eq("user_id", user.id)
+                    .eq("session_date", entryDate)
+                    .maybeSingle();
+                  if (conflictSess?.id) {
+                    sessionIdByDate.set(entryDate, conflictSess.id);
+                    payload.session_id = conflictSess.id;
+                  } else {
+                    payload.session_id = sessIdToUse;
+                  }
+                }
               }
             }
 
@@ -296,13 +328,17 @@ export async function processSyncQueue(): Promise<{
               .eq("session_date", payload.session_date)
               .maybeSingle();
             if (existing?.id) {
-              validSessionId = existing.id;
+              // Cache the real session ID for this specific date
+              if (payload.session_date && typeof payload.session_date === "string") {
+                sessionIdByDate.set(String(payload.session_date), existing.id);
+              }
               await localDB.work_sessions.update(item.record_id, { sync_status: "synced" });
               await markSyncSuccess(item.id);
               successCount++;
               continue;
             }
           }
+
 
           if (error) {
             console.error(`Sync error on ${item.table_name}:`, error.message);

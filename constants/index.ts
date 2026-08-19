@@ -23,6 +23,7 @@ export const ROUTES = {
   EMPLOYEE_HISTORY: "/history",
   EMPLOYEE_PROFILE: "/profile",
   EMPLOYEE_ASSESSMENT: "/employee-assessment",
+  EMPLOYEE_LEADERBOARD: "/leaderboard",
   OWNER_DASHBOARD: "/dashboard",
   OWNER_CALENDAR: "/calendar",
   OWNER_PAYROLL: "/payroll",
