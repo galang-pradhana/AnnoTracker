@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from "react"
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { formatRupiah, formatDecimalHours } from "@/lib/utils";
+import { formatRupiah, formatDecimalHours, getPayrollPeriod, getPayrollPeriodLabel } from "@/lib/utils";
 import { exportPayrollToExcel, exportPayrollToPDF } from "@/lib/utils/export";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { AppLogo } from "@/components/shared/AppLogo";
@@ -23,36 +23,7 @@ function localDateStr(date: Date): string {
   return `${date.getFullYear()}-${padZ(date.getMonth() + 1)}-${padZ(date.getDate())}`;
 }
 
-function getPayrollPeriod(referenceDate: Date = new Date()) {
-  const year = referenceDate.getFullYear();
-  const month = referenceDate.getMonth();
-  const day = referenceDate.getDate();
 
-  if (day >= 15) {
-    // 15th this month → 14th next month
-    const endMonth = month === 11 ? 0 : month + 1;
-    const endYear  = month === 11 ? year + 1 : year;
-    return {
-      start: `${year}-${padZ(month + 1)}-15`,
-      end:   `${endYear}-${padZ(endMonth + 1)}-14`,
-    };
-  } else {
-    // 15th last month → 14th this month
-    const startMonth = month === 0 ? 11 : month - 1;
-    const startYear  = month === 0 ? year - 1 : year;
-    return {
-      start: `${startYear}-${padZ(startMonth + 1)}-15`,
-      end:   `${year}-${padZ(month + 1)}-14`,
-    };
-  }
-}
-
-function getPayrollPeriodLabel(start: string, end: string): string {
-  const MONTH = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
-  const [sy, sm, sd] = start.split("-").map(Number);
-  const [ey, em, ed] = end.split("-").map(Number);
-  return `${sd} ${MONTH[sm - 1]} ${sy} — ${ed} ${MONTH[em - 1]} ${ey}`;
-}
 
 // ─── Payroll computation ─────────────────────────────────────────────────────
 interface TierLike { min_hours: number; max_hours: number | null; rate_per_hour: number; }
@@ -400,7 +371,7 @@ export default function PayrollPage() {
               <div>
                 <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">Periode Pembayaran</p>
                 <p className="text-sm font-bold text-[var(--text-primary)] mt-0.5">📅 {periodLabel}</p>
-                <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">Gaji dibayarkan setiap tanggal 15</p>
+                <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">💸 Gaji dibayarkan mulai <strong>tgl 15</strong> s/d selambat-lambatnya <strong>tgl 30 akhir bulan</strong></p>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => jumpToPeriod("prev")} className="px-3 py-1.5 bg-[var(--bg-surface-alt)] hover:bg-[var(--border)] rounded-lg text-xs font-semibold text-[var(--text-primary)] transition-colors cursor-pointer">← Periode Lalu</button>

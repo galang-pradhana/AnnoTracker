@@ -279,31 +279,11 @@ export default function EmployeeHistoryPage() {
     determineUserHourlyRate(userId, dayHours, dateStr, salaryTiers, userSalaryRates);
 
   return (
-    <div className="max-w-2xl mx-auto px-4 pt-6 space-y-4">
-        {/* 1. Ringkasan Pendapatan Bulanan */}
-        <div className="bg-[var(--bg-surface)] rounded-2xl p-5 border border-[var(--border)] text-[var(--text-primary)] shadow-xs space-y-3">
-          <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
-            Ringkasan {MONTH_NAMES[viewMonth]} {viewYear}
-          </p>
-          <div className="flex items-end justify-between pt-1">
-            <div>
-              <p className="text-3xl font-black tracking-tight text-[var(--accent-teal)]">{formatDecimalHours(totalMonthHours)}</p>
-              <p className="text-xs text-[var(--text-secondary)] mt-0.5">{sessions.length} hari kerja dicatat</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-[var(--text-secondary)] font-medium">Est. Pendapatan</p>
-              <p className="text-2xl font-black text-[var(--primary)] tracking-tight">{formatRupiah(totalEstimated)}</p>
-              {totalMonthBonus > 0 && (
-                <p className="text-[10px] text-[var(--primary)] font-semibold">
-                  Pokok {formatRupiah(totalMonthBasePay)} + Bonus {formatRupiah(totalMonthBonus)}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* 2. KALENDER KERJA */}
-        <div className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)] shadow-xs overflow-hidden">
+    <div className="max-w-6xl mx-auto px-4 pt-6 space-y-4">
+      {/* 2-Column Split Dashboard Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* KOLOM KIRI (7 Cols / ~60% Width): Kalender Kerja */}
+        <div className="lg:col-span-7 bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)] shadow-xs overflow-hidden">
           {/* Header Kalender */}
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border)]">
             <button
@@ -359,7 +339,7 @@ export default function EmployeeHistoryPage() {
                     onClick={() => { if (hasData) { setCollapsedGroups(new Set()); setSelectedDay({ session: session!, totalSeconds: daySeconds }); } }}
                     disabled={!hasData}
                     className={`
-                      h-16 flex flex-col items-center justify-between py-2 border-b border-r border-[var(--border)]/40 transition-all relative
+                      min-h-[68px] flex flex-col items-center justify-between py-1.5 border-b border-r border-[var(--border)]/40 transition-all relative
                       ${hasData ? "cursor-pointer hover:bg-[var(--primary-soft)] active:scale-95" : "cursor-default"}
                       ${isToday ? "bg-[var(--primary-soft)]/50 font-bold" : ""}
                     `}
@@ -380,9 +360,14 @@ export default function EmployeeHistoryPage() {
 
                     {/* Badge Kontras Tinggi Angka Jam Kerja */}
                     {hasData ? (
-                      <span className="text-[10px] font-extrabold text-[var(--primary)] bg-[var(--primary-soft)] px-1.5 py-0.5 rounded-md leading-none border border-[var(--primary)]/20">
-                        {formatDecimalHours(dayHours)}
-                      </span>
+                      <div className="flex flex-col items-center bg-[var(--primary-soft)] px-1.5 py-0.5 rounded-md border border-[var(--primary)]/20 leading-tight">
+                        <span className="text-[10px] font-black text-[var(--primary)] whitespace-nowrap">
+                          {formatDecimalHours(dayHours, { format: "decimal" })}
+                        </span>
+                        <span className="text-[9px] font-semibold text-[var(--text-secondary)] whitespace-nowrap">
+                          ({formatDecimalHours(dayHours, { format: "short" })})
+                        </span>
+                      </div>
                     ) : (
                       <span className="h-4" />
                     )}
@@ -405,68 +390,97 @@ export default function EmployeeHistoryPage() {
           </div>
         </div>
 
-        {/* 3. RINCIAN BONUS MINGGUAN */}
-        {weekSummaries.length > 0 && (
-          <div className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)] shadow-xs overflow-hidden transition-all">
-            <button
-              type="button"
-              onClick={() => setIsBonusExpanded((v) => !v)}
-              className="w-full px-5 py-3.5 flex items-center justify-between bg-[var(--bg-surface-alt)]/50 hover:bg-[var(--bg-surface-alt)] transition-colors text-left cursor-pointer"
-            >
+        {/* KOLOM KANAN (5 Cols / ~40% Width): Ringkasan Pendapatan & Bonus Mingguan */}
+        <div className="lg:col-span-5 space-y-4">
+          {/* 1. Ringkasan Pendapatan Bulanan */}
+          <div className="bg-[var(--bg-surface)] rounded-2xl p-5 border border-[var(--border)] text-[var(--text-primary)] shadow-xs space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-secondary)]">
+              Ringkasan {MONTH_NAMES[viewMonth]} {viewYear}
+            </p>
+            <div className="space-y-3 pt-1">
               <div>
-                <h2 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider flex items-center gap-1.5">
-                  <span>🎯 Rincian Bonus Mingguan</span>
+                <p className="text-2xl font-black tracking-tight text-[var(--accent-teal)]">{formatDecimalHours(totalMonthHours)}</p>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">{sessions.length} hari kerja dicatat</p>
+              </div>
+              <div className="pt-2 border-t border-[var(--border)]">
+                <p className="text-xs text-[var(--text-secondary)] font-medium">Est. Pendapatan Bulanan</p>
+                <p className="text-2xl font-black text-[var(--primary)] tracking-tight">{formatRupiah(totalEstimated)}</p>
+                {totalMonthBonus > 0 && (
+                  <p className="text-[11px] text-[var(--primary)] font-semibold mt-1">
+                    Pokok {formatRupiah(totalMonthBasePay)} + Bonus {formatRupiah(totalMonthBonus)}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 2. RINCIAN BONUS MINGGUAN */}
+          {weekSummaries.length > 0 && (
+            <div className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)] shadow-xs overflow-hidden transition-all">
+              <button
+                type="button"
+                onClick={() => setIsBonusExpanded((v) => !v)}
+                className="w-full px-5 py-3.5 flex items-center justify-between bg-[var(--bg-surface-alt)]/50 hover:bg-[var(--bg-surface-alt)] transition-colors text-left cursor-pointer gap-2"
+              >
+                <div>
+                  <h2 className="text-xs font-bold text-[var(--text-primary)] uppercase tracking-wider">
+                    🎯 Rincian Bonus Mingguan
+                  </h2>
+                  <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                    Target ≥ {bonusThreshold}j/minggu → +{formatRupiah(bonusAmount)}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
                   {totalMonthBonus > 0 && (
-                    <span className="text-[10px] bg-[var(--primary-soft)] text-[var(--primary)] px-2 py-0.5 rounded-full font-bold">
+                    <span className="px-2 py-0.5 rounded-xl text-[11px] font-extrabold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
                       +{formatRupiah(totalMonthBonus)}
                     </span>
                   )}
-                </h2>
-                <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-                  Target ≥ {bonusThreshold}j/minggu → +{formatRupiah(bonusAmount)}
-                </p>
-              </div>
-              <span className="text-xs font-bold text-[var(--primary)]">
-                {isBonusExpanded ? "Tutup ▲" : "Lihat Detail ▼"}
-              </span>
-            </button>
+                  <span className="text-xs font-bold text-[var(--primary)] shrink-0">
+                    {isBonusExpanded ? "Tutup ▲" : "Lihat Detail ▼"}
+                  </span>
+                </div>
+              </button>
 
-            {isBonusExpanded && (
-              <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
-                {weekSummaries.map((week) => (
-                  <div key={week.startDate} className="flex items-center justify-between px-5 py-3">
-                    <div>
-                      <p className="text-xs font-semibold text-[var(--text-primary)]">{week.weekLabel}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[11px] text-[var(--text-secondary)]">{formatDecimalHours(week.hours)}</span>
-                        <div className="h-1.5 w-20 bg-[var(--border)] rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${week.qualified ? "bg-[var(--success)]" : "bg-[var(--primary)]"}`}
-                            style={{ width: `${Math.min(100, (week.hours / week.bonusThreshold) * 100).toFixed(0)}%` }}
-                          />
+              {isBonusExpanded && (
+                <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+                  {weekSummaries.map((week) => (
+                    <div key={week.startDate} className="flex items-center justify-between px-5 py-3 gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-[var(--text-primary)] truncate">{week.weekLabel}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[11px] text-[var(--text-secondary)] whitespace-nowrap">{formatDecimalHours(week.hours)}</span>
+                          <div className="h-1.5 flex-1 max-w-[80px] bg-[var(--border)] rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${week.qualified ? "bg-[var(--success)]" : "bg-[var(--primary)]"}`}
+                              style={{ width: `${Math.min(100, (week.hours / week.bonusThreshold) * 100).toFixed(0)}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-[var(--text-secondary)] font-medium">
+                            {((week.hours / week.bonusThreshold) * 100).toFixed(0)}%
+                          </span>
                         </div>
-                        <span className="text-[10px] text-[var(--text-secondary)] font-medium">
-                          {((week.hours / week.bonusThreshold) * 100).toFixed(0)}%
-                        </span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        {week.qualified ? (
+                          <span className="inline-flex items-center gap-1 bg-[var(--primary-soft)] text-[var(--primary)] text-[11px] font-bold px-2 py-0.5 rounded-lg">
+                            🎉 +{formatRupiah(week.bonusEarned)}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-[var(--text-secondary)] font-medium">
+                            Sisa {formatDecimalHours(week.bonusThreshold - week.hours)}
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      {week.qualified ? (
-                        <span className="inline-flex items-center gap-1 bg-[var(--primary-soft)] text-[var(--primary)] text-[11px] font-bold px-2.5 py-1 rounded-lg">
-                          🎉 +{formatRupiah(week.bonusEarned)}
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-[var(--text-secondary)] font-medium">
-                          Sisa {formatDecimalHours(week.bonusThreshold - week.hours)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Detail Modal Saat Tanggal Ditekan */}
       {selectedDay && (() => {

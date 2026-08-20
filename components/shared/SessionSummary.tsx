@@ -116,11 +116,11 @@ export function SessionSummary({
         {/* Total Paid Duration */}
         <div className="bg-[var(--bg-surface-alt)] rounded-xl p-3 border border-[var(--border)]">
           <p className="text-[11px] font-medium text-[var(--text-secondary)]">Jam Terbayar</p>
-          <div className="text-2xl font-black tracking-tight text-[var(--accent-teal)] mt-0.5">
-            {formatDecimalHours(totalHours)}
+          <div className="text-xl font-black tracking-tight text-[var(--accent-teal)] mt-0.5">
+            {formatDecimalHours(totalHours, { format: "decimal" })}
           </div>
-          <p className="text-[10px] text-[var(--text-secondary)] mt-1">
-            ({formatSecondsToTime(totalSeconds)})
+          <p className="text-[10px] text-[var(--text-secondary)] font-semibold mt-1">
+            ⏱️ {formatSecondsToTime(totalSeconds)}
           </p>
         </div>
       </div>

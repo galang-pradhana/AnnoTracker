@@ -41,10 +41,13 @@ export function formatSecondsToTime(seconds: number): string {
 }
 
 /**
- * Format decimal hours (e.g. 3.58) to formatted detailed string:
- * e.g. "3.58 jam (3j 35m)" or "5 jam" if exact integer.
+ * Format decimal hours (e.g. 55.5833) to formatted double detail string:
+ * e.g. "55.58 jam - 55j 35m" or "5 jam" if exact integer.
  */
-export function formatDecimalHours(hours: number, options?: { compact?: boolean }): string {
+export function formatDecimalHours(
+  hours: number,
+  options?: { format?: "double" | "compact" | "decimal" | "short" }
+): string {
   if (!hours || isNaN(hours) || hours <= 0) return "0 jam";
 
   const totalMinutes = Math.round(hours * 60);
@@ -57,14 +60,15 @@ export function formatDecimalHours(hours: number, options?: { compact?: boolean 
     return `${hrs} jam`;
   }
 
-  // Format explicit minutes detail
+  const fmt = options?.format || "double";
   const minText = hrs > 0 ? `${hrs}j ${mins}m` : `${mins}m`;
 
-  if (options?.compact) {
-    return `${decimalVal}j (${minText})`;
-  }
+  if (fmt === "decimal") return `${decimalVal} jam`;
+  if (fmt === "short") return minText;
+  if (fmt === "compact") return `${decimalVal}j · ${minText}`;
 
-  return `${decimalVal} jam (${minText})`;
+  // Default "double": "55.58 jam - 55j 35m" (or "0.64 jam - 38m")
+  return `${decimalVal} jam - ${minText}`;
 }
 
 /**
@@ -76,4 +80,42 @@ export function formatRupiah(amount: number): string {
     currency: "IDR",
     maximumFractionDigits: 0,
   }).format(amount);
+}
+
+function padZ(n: number) { return String(n).padStart(2, "0"); }
+
+/**
+ * Returns payroll period cutoff (15th month M -> 14th month M+1)
+ */
+export function getPayrollPeriod(referenceDate: Date = new Date()) {
+  const year = referenceDate.getFullYear();
+  const month = referenceDate.getMonth();
+  const day = referenceDate.getDate();
+
+  if (day >= 15) {
+    const endMonth = month === 11 ? 0 : month + 1;
+    const endYear  = month === 11 ? year + 1 : year;
+    return {
+      start: `${year}-${padZ(month + 1)}-15`,
+      end:   `${endYear}-${padZ(endMonth + 1)}-14`,
+    };
+  } else {
+    const startMonth = month === 0 ? 11 : month - 1;
+    const startYear  = month === 0 ? year - 1 : year;
+    return {
+      start: `${startYear}-${padZ(startMonth + 1)}-15`,
+      end:   `${year}-${padZ(month + 1)}-14`,
+    };
+  }
+}
+
+/**
+ * Formats start date (YYYY-MM-DD) and end date (YYYY-MM-DD) to Indonesian label string
+ * Example: "15 Agu 2026 — 14 Sep 2026"
+ */
+export function getPayrollPeriodLabel(start: string, end: string): string {
+  const MONTH = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+  const [sy, sm, sd] = start.split("-").map(Number);
+  const [ey, em, ed] = end.split("-").map(Number);
+  return `${sd} ${MONTH[sm - 1]} ${sy} — ${ed} ${MONTH[em - 1]} ${ey}`;
 }
