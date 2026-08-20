@@ -41,14 +41,30 @@ export function formatSecondsToTime(seconds: number): string {
 }
 
 /**
- * Format decimal hours (e.g. 6.5) to formatted string (6j 30m)
+ * Format decimal hours (e.g. 3.58) to formatted detailed string:
+ * e.g. "3.58 jam (3j 35m)" or "5 jam" if exact integer.
  */
-export function formatDecimalHours(hours: number): string {
-  const hrs = Math.floor(hours);
-  const mins = Math.round((hours - hrs) * 60);
-  if (hrs > 0 && mins > 0) return `${hrs}j ${mins}m`;
-  if (hrs > 0) return `${hrs}j`;
-  return `${mins}m`;
+export function formatDecimalHours(hours: number, options?: { compact?: boolean }): string {
+  if (!hours || isNaN(hours) || hours <= 0) return "0 jam";
+
+  const totalMinutes = Math.round(hours * 60);
+  const hrs = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  const decimalVal = Number(hours.toFixed(2));
+
+  // If exact round hours (no leftover minutes)
+  if (mins === 0) {
+    return `${hrs} jam`;
+  }
+
+  // Format explicit minutes detail
+  const minText = hrs > 0 ? `${hrs}j ${mins}m` : `${mins}m`;
+
+  if (options?.compact) {
+    return `${decimalVal}j (${minText})`;
+  }
+
+  return `${decimalVal} jam (${minText})`;
 }
 
 /**

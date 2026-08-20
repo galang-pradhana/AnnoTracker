@@ -148,7 +148,7 @@ export default function OwnerCalendarPage() {
           <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm col-span-2 sm:col-span-1">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Rata-rata/Hari Aktif</p>
             <p className="text-3xl font-bold text-slate-900 mt-1">
-              {activeDays > 0 ? formatDecimalHours(totalMonthHours / activeDays) : "0j"}
+              {activeDays > 0 ? formatDecimalHours(totalMonthHours / activeDays) : formatDecimalHours(0)}
             </p>
             <p className="text-[11px] text-slate-400 mt-0.5">per hari kerja</p>
           </div>

@@ -14,7 +14,7 @@ import { AppLogo } from "@/components/shared/AppLogo";
 import { SessionSummary } from "@/components/shared/SessionSummary";
 import { TaskEntryForm } from "@/components/shared/TaskEntryForm";
 import { TaskEntryList } from "@/components/shared/TaskEntryList";
-import { LiveTimerCard } from "@/components/shared/LiveTimerCard";
+import { TaskAlarmCard } from "@/components/shared/TaskAlarmCard";
 import { ProofUpload } from "@/components/shared/ProofUpload";
 import { ROUTES } from "@/constants";
 import { getWorkDate } from "@/lib/utils";
@@ -70,8 +70,9 @@ export default function WorkSessionPage() {
     null
   );
 
-  // State to bridge LiveTimer -> TaskEntryForm
+  // State to bridge LiveTimer -> TaskEntryForm & TaskAlarm auto-trigger
   const [externalDuration, setExternalDuration] = useState<number | null>(null);
+  const [autoStartTriggerCount, setAutoStartTriggerCount] = useState<number>(0);
 
   // Initialize or fetch master data & session
   const initSession = useCallback(async () => {
@@ -352,16 +353,16 @@ export default function WorkSessionPage() {
               taskTypes={taskTypes}
               onAddTask={handleAddTask}
               initialDurationSeconds={externalDuration}
+              onTaskInfoPasted={() => setAutoStartTriggerCount((prev) => prev + 1)}
             />
           </div>
 
-          {/* KOLOM 3 (KANAN) - Live Timer Card, Log Task Terakhir, & Proof Upload (~25% width / 3 cols) */}
-          {/* Mobile Order: 2 (Live Timer) & 4 (Log Task & Proof) */}
+          {/* KOLOM 3 (KANAN) - Task Alarm Card, Log Task Terakhir, & Proof Upload (~25% width / 3 cols) */}
+          {/* Mobile Order: 2 (Task Alarm) & 4 (Log Task & Proof) */}
           <div className="lg:col-span-3 order-2 lg:order-3 space-y-6">
-            {/* Live Timer Card */}
-            <LiveTimerCard
-              paidSecondsTotal={totalSeconds}
-              onApplyTimerToForm={handleApplyTimerToForm}
+            {/* Task Alarm Card */}
+            <TaskAlarmCard
+              autoStartTriggerCount={autoStartTriggerCount}
             />
 
             {/* Log Task Terakhir */}

@@ -875,7 +875,7 @@ export default function OwnerDashboardPage() {
               <div className="bg-[var(--bg-surface)] rounded-2xl p-5 border border-[var(--border)] shadow-xs">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-secondary)]">Rata-rata Jam/Hari (Tim)</p>
                 <p className="text-3xl font-extrabold text-[var(--text-primary)] mt-1">
-                  {daysPassedThisMonth > 0 ? formatDecimalHours(totalTeamHours / daysPassedThisMonth) : "0j"}
+                  {daysPassedThisMonth > 0 ? formatDecimalHours(totalTeamHours / daysPassedThisMonth) : formatDecimalHours(0)}
                 </p>
                 <p className="text-[11px] text-[var(--text-secondary)] mt-1">rata-rata per hari kalender</p>
               </div>

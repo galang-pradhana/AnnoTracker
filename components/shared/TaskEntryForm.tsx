@@ -59,6 +59,7 @@ interface TaskEntryFormProps {
     note: string; // JSON.stringify(TaskNote)
   }) => void;
   initialDurationSeconds?: number | null;
+  onTaskInfoPasted?: () => void;
 }
 
 function formatStopwatchDisplay(totalSeconds: number): {
@@ -99,6 +100,7 @@ export function TaskEntryForm({
   taskTypes,
   onAddTask,
   initialDurationSeconds,
+  onTaskInfoPasted,
 }: TaskEntryFormProps) {
   const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [selectedTaskType, setSelectedTaskType] = useState<string>("");
@@ -154,8 +156,13 @@ export function TaskEntryForm({
 
   const handleNoteTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
+    const isNewInput = rawNoteText.trim() === "" && val.trim() !== "";
     setRawNoteText(val);
     setParsedNote(parseNoteText(val));
+
+    if (isNewInput && onTaskInfoPasted) {
+      onTaskInfoPasted();
+    }
   };
 
   // Adjust duration by delta

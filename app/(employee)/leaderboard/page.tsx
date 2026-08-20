@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { getWorkDate } from "@/lib/utils";
+import { getWorkDate, formatDecimalHours } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -46,11 +46,7 @@ function getDateRange(period: Period): { start: string; end: string } {
 }
 
 function formatSeconds(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h === 0) return `${m}m`;
-  if (m === 0) return `${h}j`;
-  return `${h}j ${m}m`;
+  return formatDecimalHours(seconds / 3600);
 }
 
 function getPeriodLabel(period: Period): string {
