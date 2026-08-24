@@ -38,7 +38,19 @@ function formatTimeMMSS(totalSeconds: number): string {
   return `${pad(mins)}:${pad(secs)}`;
 }
 
-// ── Web Audio API Synthesizer Sound Player (3 Distinct Tones) ────────────────
+// ── Web Audio API Synthesizer Sound Player (3 Distinct Alarm Tones) ──────────
+
+// Helper: buat compressor agar volume lebih keras & konsisten tanpa clipping
+function createCompressor(ctx: AudioContext): DynamicsCompressorNode {
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.setValueAtTime(-20, ctx.currentTime);
+  comp.knee.setValueAtTime(5, ctx.currentTime);
+  comp.ratio.setValueAtTime(12, ctx.currentTime);
+  comp.attack.setValueAtTime(0.001, ctx.currentTime);
+  comp.release.setValueAtTime(0.1, ctx.currentTime);
+  comp.connect(ctx.destination);
+  return comp;
+}
 
 function playAlarmChimeSequence(tone: AlarmSoundTone = "tone1"): () => void {
   try {
@@ -48,69 +60,93 @@ function playAlarmChimeSequence(tone: AlarmSoundTone = "tone1"): () => void {
     const ctx = new AudioCtx();
     let isStopped = false;
     let timeoutId: NodeJS.Timeout | null = null;
+    const output = createCompressor(ctx);
 
     const playPulse = () => {
       if (isStopped) return;
 
       if (tone === "tone2") {
-        // TONE 2: Digital Beep (Double-beep pulse 1000Hz)
+        // TONE 2: Alarm Clock Digital — burst 4 beep cepat (1400Hz square wave)
+        // Mirip alarm jam digital yang agresif
+        const beepCount = 4;
+        const beepDur = 0.08;
+        const beepGap = 0.12;
+        for (let i = 0; i < beepCount; i++) {
+          const t = ctx.currentTime + i * (beepDur + beepGap);
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "square";
+          osc.frequency.setValueAtTime(1400, t);
+          gain.gain.setValueAtTime(0.6, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + beepDur);
+          osc.connect(gain);
+          gain.connect(output);
+          osc.start(t);
+          osc.stop(t + beepDur);
+        }
+        // Jeda antar burst: 4 × (0.08+0.12) = 0.8 detik + gap
+        timeoutId = setTimeout(() => { if (!isStopped) playPulse(); }, 1100);
+
+      } else if (tone === "tone3") {
+        // TONE 3: Sirine 2-Nada — 880Hz ↔ 660Hz bergantian (seperti klakson/ambulan)
+        // Nada tinggi
         const osc1 = ctx.createOscillator();
         const gain1 = ctx.createGain();
-        osc1.type = "square";
-        osc1.frequency.setValueAtTime(1000, ctx.currentTime);
-        gain1.gain.setValueAtTime(0.15, ctx.currentTime);
-        gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+        osc1.type = "sawtooth";
+        osc1.frequency.setValueAtTime(880, ctx.currentTime);
+        osc1.frequency.linearRampToValueAtTime(660, ctx.currentTime + 0.25);
+        gain1.gain.setValueAtTime(0.7, ctx.currentTime);
+        gain1.gain.setValueAtTime(0.7, ctx.currentTime + 0.2);
+        gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.27);
         osc1.connect(gain1);
-        gain1.connect(ctx.destination);
-        osc1.start();
-        osc1.stop(ctx.currentTime + 0.1);
+        gain1.connect(output);
+        osc1.start(ctx.currentTime);
+        osc1.stop(ctx.currentTime + 0.27);
 
+        // Nada rendah
         const osc2 = ctx.createOscillator();
         const gain2 = ctx.createGain();
-        osc2.type = "square";
-        osc2.frequency.setValueAtTime(1000, ctx.currentTime + 0.15);
-        gain2.gain.setValueAtTime(0.15, ctx.currentTime + 0.15);
-        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+        osc2.type = "sawtooth";
+        osc2.frequency.setValueAtTime(660, ctx.currentTime + 0.3);
+        osc2.frequency.linearRampToValueAtTime(880, ctx.currentTime + 0.55);
+        gain2.gain.setValueAtTime(0.7, ctx.currentTime + 0.3);
+        gain2.gain.setValueAtTime(0.7, ctx.currentTime + 0.5);
+        gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.57);
         osc2.connect(gain2);
-        gain2.connect(ctx.destination);
-        osc2.start(ctx.currentTime + 0.15);
-        osc2.stop(ctx.currentTime + 0.25);
+        gain2.connect(output);
+        osc2.start(ctx.currentTime + 0.3);
+        osc2.stop(ctx.currentTime + 0.57);
 
-        timeoutId = setTimeout(() => { if (!isStopped) playPulse(); }, 750);
-      } else if (tone === "tone3") {
-        // TONE 3: Bell Lembut (Warm 3-tone arpeggio C5 -> E5 -> G5)
-        const freqs = [523.25, 659.25, 783.99]; // C5, E5, G5
-        freqs.forEach((freq, idx) => {
+        timeoutId = setTimeout(() => { if (!isStopped) playPulse(); }, 700);
+
+      } else {
+        // TONE 1: Urgent Ascending Chime — 3 nada naik cepat (C6→E6→G6) makin keras
+        // Seperti notif urgent / alarm handphone premium
+        const notes = [
+          { freq: 1046.5, t: 0,    dur: 0.18, gain: 0.55 }, // C6
+          { freq: 1318.5, t: 0.15, dur: 0.18, gain: 0.65 }, // E6
+          { freq: 1568.0, t: 0.28, dur: 0.28, gain: 0.75 }, // G6 (paling keras & panjang)
+        ];
+        notes.forEach(({ freq, t, dur, gain: gainVal }) => {
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.type = "sine";
-          osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.08);
-          gain.gain.setValueAtTime(0, ctx.currentTime + idx * 0.08);
-          gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + idx * 0.08 + 0.03);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.08 + 0.5);
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + t);
+          // Sedikit vibrato pada G6 agar terasa lebih urgent
+          if (freq === 1568.0) {
+            osc.frequency.linearRampToValueAtTime(freq * 1.02, ctx.currentTime + t + 0.1);
+            osc.frequency.linearRampToValueAtTime(freq, ctx.currentTime + t + 0.2);
+          }
+          gain.gain.setValueAtTime(0, ctx.currentTime + t);
+          gain.gain.linearRampToValueAtTime(gainVal, ctx.currentTime + t + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + dur);
           osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start(ctx.currentTime + idx * 0.08);
-          osc.stop(ctx.currentTime + idx * 0.08 + 0.5);
+          gain.connect(output);
+          osc.start(ctx.currentTime + t);
+          osc.stop(ctx.currentTime + t + dur + 0.01);
         });
 
-        timeoutId = setTimeout(() => { if (!isStopped) playPulse(); }, 1100);
-      } else {
-        // TONE 1: Chime Melodis (Default - A5 -> C6)
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(880, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(1046.5, ctx.currentTime + 0.15);
-        gain.gain.setValueAtTime(0, ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.45);
-
-        timeoutId = setTimeout(() => { if (!isStopped) playPulse(); }, 900);
+        timeoutId = setTimeout(() => { if (!isStopped) playPulse(); }, 700);
       }
     };
 
@@ -435,9 +471,9 @@ export function TaskAlarmCard({
             className="px-1.5 py-0.5 text-[10px] font-semibold rounded-md bg-[var(--bg-surface-alt)] text-[var(--text-primary)] border border-[var(--border)] focus:outline-none cursor-pointer"
             title="Pilih Nada Suara Alarm"
           >
-            <option value="tone1">Suara 1 (Chime ⭐)</option>
-            <option value="tone2">Suara 2 (Digital Beep)</option>
-            <option value="tone3">Suara 3 (Bell Lembut)</option>
+            <option value="tone1">Suara 1 (Urgent Chime ⭐)</option>
+            <option value="tone2">Suara 2 (Alarm Clock 🔔)</option>
+            <option value="tone3">Suara 3 (Sirine 🚨)</option>
           </select>
           <button
             type="button"
