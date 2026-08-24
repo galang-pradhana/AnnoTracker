@@ -142,6 +142,8 @@ export function TaskAlarmCard({
   const stopSoundRef = useRef<(() => void) | null>(null);
   const prevTriggerRef = useRef<number>(autoStartTriggerCount);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Sumber kebenaran waktu — disimpan di ref agar tidak trigger re-render
+  const endTimestampRef = useRef<number | null>(null);
 
   // Stop active sound safely
   const stopAlarmSound = useCallback(() => {
@@ -181,6 +183,8 @@ export function TaskAlarmCard({
             if (left <= 0) {
               triggerAlarmRing();
             } else {
+              // Restore endTimestampRef agar timer langsung akurat saat resume
+              endTimestampRef.current = parsed.endTimestamp;
               setRemainingSeconds(left);
               setIsRunning(true);
             }
@@ -226,39 +230,52 @@ export function TaskAlarmCard({
     [alarmMode, soundTone]
   );
 
-  // Timer Countdown Logic
+  // Timer Countdown Logic — TIMESTAMP-BASED (akurat, tidak drift)
   useEffect(() => {
     if (isRunning) {
+      // Jika endTimestampRef belum di-set (misal start baru), set sekarang
+      if (!endTimestampRef.current) {
+        endTimestampRef.current = Date.now() + remainingSeconds * 1000;
+      }
+
       timerIntervalRef.current = setInterval(() => {
-        setRemainingSeconds((prev) => {
-          if (prev <= 1) {
-            triggerAlarmRing();
-            return 0;
-          }
-          const next = prev - 1;
-          const endTs = Date.now() + next * 1000;
-          saveState(targetSeconds, next, true, endTs, isMuted, alarmMode);
-          return next;
-        });
-      }, 1000);
+        const endTs = endTimestampRef.current;
+        if (!endTs) return;
+
+        // Hitung sisa waktu dari endTimestamp — BUKAN dari prev - 1
+        const left = Math.round((endTs - Date.now()) / 1000);
+
+        if (left <= 0) {
+          triggerAlarmRing();
+          endTimestampRef.current = null;
+          setRemainingSeconds(0);
+        } else {
+          setRemainingSeconds(left);
+          saveState(targetSeconds, left, true, endTs, isMuted, alarmMode);
+        }
+      }, 500); // Tick setiap 500ms agar display lebih responsif dan lebih akurat
     } else {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
+      // Jangan reset endTimestampRef di sini — dibutuhkan saat resume dari pause
     }
 
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
-  }, [isRunning, targetSeconds, isMuted, alarmMode, saveState, triggerAlarmRing]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRunning]);
 
   // Auto-Start Handler on Paste Task Info
   const handleAutoStartAlarm = useCallback(() => {
     if (alarmMode !== "auto") return; // Ignore if in manual mode
     stopAlarmSound();
     setIsAlarmActive(false);
+    // Set endTimestampRef sebagai sumber kebenaran waktu
+    const endTs = Date.now() + targetSeconds * 1000;
+    endTimestampRef.current = endTs;
     setRemainingSeconds(targetSeconds);
     setIsRunning(true);
-    const endTs = Date.now() + targetSeconds * 1000;
     saveState(targetSeconds, targetSeconds, true, endTs, isMuted, alarmMode);
   }, [targetSeconds, isMuted, alarmMode, saveState, stopAlarmSound]);
 
@@ -282,14 +299,18 @@ export function TaskAlarmCard({
     stopAlarmSound();
     setIsAlarmActive(false);
     const startingSecs = remainingSeconds > 0 ? remainingSeconds : targetSeconds;
+    // Set endTimestampRef sebagai sumber kebenaran waktu
+    const endTs = Date.now() + startingSecs * 1000;
+    endTimestampRef.current = endTs;
     setRemainingSeconds(startingSecs);
     setIsRunning(true);
-    const endTs = Date.now() + startingSecs * 1000;
     saveState(targetSeconds, startingSecs, true, endTs, isMuted);
   };
 
   const handlePause = () => {
     setIsRunning(false);
+    // Simpan remainingSeconds saat pause, reset endTimestampRef
+    endTimestampRef.current = null;
     saveState(targetSeconds, remainingSeconds, false, null, isMuted);
   };
 
@@ -297,6 +318,7 @@ export function TaskAlarmCard({
     stopAlarmSound();
     setIsAlarmActive(false);
     setIsRunning(false);
+    endTimestampRef.current = null;
     setRemainingSeconds(targetSeconds);
     saveState(targetSeconds, targetSeconds, false, null, isMuted);
   };
@@ -305,6 +327,7 @@ export function TaskAlarmCard({
     stopAlarmSound();
     setIsAlarmActive(false);
     setIsRunning(false);
+    endTimestampRef.current = null;
     setRemainingSeconds(targetSeconds);
     saveState(targetSeconds, targetSeconds, false, null, isMuted);
   };
@@ -316,6 +339,7 @@ export function TaskAlarmCard({
     setTargetSeconds(secs);
     setRemainingSeconds(secs);
     setIsRunning(false);
+    endTimestampRef.current = null;
     saveState(secs, secs, false, null, isMuted);
   };
 
