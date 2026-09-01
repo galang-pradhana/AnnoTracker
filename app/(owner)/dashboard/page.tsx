@@ -147,6 +147,9 @@ export default function OwnerDashboardPage() {
   const [calYear, setCalYear] = useState(currentYear);
   const [calMonth, setCalMonth] = useState(currentMonth);
   const [selectedCalendarDay, setSelectedCalendarDay] = useState<{ date: string; data: CalendarDayData } | null>(null);
+  // Bug fix: State terpisah untuk data kalender per bulan yang dipilih
+  const [calendarSessions, setCalendarSessions] = useState<WorkSessionWithEntries[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
 
   // Account tab state — filter periode & side panel drill-down
   const [accountPeriod, setAccountPeriod] = useState<"today" | "week" | "month">("month");
@@ -227,6 +230,28 @@ export default function OwnerDashboardPage() {
     }
   }, [router, currentPayrollPeriod]);
 
+  // ── Bug fix: Fetch kalender per bulan yang dipilih ────────────────────────
+  const fetchCalendarData = useCallback(async (year: number, month: number) => {
+    setCalendarLoading(true);
+    try {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { start, end } = getMonthRange(year, month);
+      const { data } = await supabase
+        .from("work_sessions")
+        .select("*, user:users(*), task_entries(*, client_account:client_accounts(*), task_type:task_types(*))")
+        .gte("session_date", start)
+        .lte("session_date", end)
+        .order("session_date", { ascending: true });
+      if (data) setCalendarSessions(data as unknown as WorkSessionWithEntries[]);
+    } catch (err) {
+      console.error("Dashboard calendar fetch error:", err);
+    } finally {
+      setCalendarLoading(false);
+    }
+  }, []);
+
   // ── Fetch by date ─────────────────────────────────────────────────────────
   const fetchDateSessions = useCallback(async (date: string) => {
     setDateLoading(true);
@@ -251,6 +276,11 @@ export default function OwnerDashboardPage() {
   useEffect(() => {
     fetchDateSessions(selectedDate);
   }, [fetchDateSessions, selectedDate]);
+
+  // Bug fix: Re-fetch data kalender setiap kali bulan/tahun berubah
+  useEffect(() => {
+    fetchCalendarData(calYear, calMonth);
+  }, [fetchCalendarData, calYear, calMonth]);
 
   // ── Derived: Employee Stats ───────────────────────────────────────────────
   const employeeStats: EmployeeStats[] = useMemo(() => {
@@ -351,7 +381,7 @@ export default function OwnerDashboardPage() {
       .sort((a, b) => b.totalSeconds - a.totalSeconds);
   }, [monthSessions, accountPeriod]);
 
-  // ── Helper: employee breakdown untuk akun tertentu, per filter aktif ────────
+  // ── Helper: employee + task type breakdown untuk akun tertentu, per filter aktif ──
   const getAccountEmployeeBreakdown = (acc: AccountStats) => {
     const now = new Date();
     const todayISO = getWorkDate(now);
@@ -367,24 +397,46 @@ export default function OwnerDashboardPage() {
       return true;
     });
 
+    // Aggregasi per karyawan
     const empMap = new Map<string, { name: string; seconds: number; taskCount: number }>();
+    // Aggregasi per jenis task (Bug fix: tambah task type breakdown)
+    const taskTypeMap = new Map<string, { name: string; seconds: number; taskCount: number }>();
+
     filtered.forEach(s => {
       (s.task_entries || []).forEach(e => {
         if (e.client_account_id !== acc.account.id) return;
+        const secs = e.duration_seconds || 0;
+
+        // Per karyawan
         const existing = empMap.get(s.user_id);
         if (existing) {
-          existing.seconds += e.duration_seconds || 0;
+          existing.seconds += secs;
           existing.taskCount += 1;
         } else {
           empMap.set(s.user_id, {
             name: s.user?.full_name || "Karyawan",
-            seconds: e.duration_seconds || 0,
+            seconds: secs,
             taskCount: 1,
           });
         }
+
+        // Per jenis task
+        const taskTypeName = (e.task_type as { name?: string } | null)?.name || "Tanpa Jenis Task";
+        const taskTypeKey = (e.task_type as { id?: string } | null)?.id || taskTypeName;
+        const existingTask = taskTypeMap.get(taskTypeKey);
+        if (existingTask) {
+          existingTask.seconds += secs;
+          existingTask.taskCount += 1;
+        } else {
+          taskTypeMap.set(taskTypeKey, { name: taskTypeName, seconds: secs, taskCount: 1 });
+        }
       });
     });
-    return Array.from(empMap.values()).sort((a, b) => b.seconds - a.seconds);
+
+    return {
+      employees: Array.from(empMap.values()).sort((a, b) => b.seconds - a.seconds),
+      taskTypes: Array.from(taskTypeMap.values()).sort((a, b) => b.seconds - a.seconds),
+    };
   };
 
   // ── Derived: Filtered Language Stats (berdasarkan languagePeriod) ─────────
@@ -525,10 +577,10 @@ export default function OwnerDashboardPage() {
       .sort((a, b) => b.totalSeconds - a.totalSeconds);
   }, [monthSessions]);
 
-  // ── Derived: Calendar Map ────────────────────────────────────────────────
+  // ── Derived: Calendar Map (Bug fix: pakai calendarSessions, bukan monthSessions) ─
   const calendarDayMap = useMemo(() => {
     const map = new Map<string, CalendarDayData>();
-    monthSessions.forEach(s => {
+    calendarSessions.forEach(s => {
       const secs = (s.task_entries || []).reduce((sum, e) => sum + (e.duration_seconds || 0), 0);
       const existing = map.get(s.session_date);
       if (existing) {
@@ -540,7 +592,7 @@ export default function OwnerDashboardPage() {
       }
     });
     return map;
-  }, [monthSessions]);
+  }, [calendarSessions]);
 
   // Calendar cells setup
   const daysInMonth = getDaysInMonth(calYear, calMonth);
@@ -897,17 +949,29 @@ export default function OwnerDashboardPage() {
           <div className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)] shadow-xs overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]">
               <button
-                onClick={() => setCalMonth(m => (m === 0 ? 11 : m - 1))}
+                onClick={() => {
+                  if (calMonth === 0) { setCalMonth(11); setCalYear(y => y - 1); }
+                  else setCalMonth(m => m - 1);
+                }}
                 className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[var(--bg-surface-alt)] text-[var(--text-primary)] font-bold transition-colors cursor-pointer"
               >
                 ←
               </button>
               <div className="text-center">
                 <h2 className="text-base font-bold text-[var(--text-primary)]">{MONTH_NAMES[calMonth]} {calYear}</h2>
+                {calendarLoading && <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">Memuat data...</p>}
               </div>
               <button
-                onClick={() => setCalMonth(m => (m === 11 ? 0 : m + 1))}
-                className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[var(--bg-surface-alt)] text-[var(--text-primary)] font-bold transition-colors cursor-pointer"
+                onClick={() => {
+                  const nextYear = calMonth === 11 ? calYear + 1 : calYear;
+                  const nextMonth = calMonth === 11 ? 0 : calMonth + 1;
+                  // Jangan izinkan navigasi ke masa depan
+                  if (nextYear > currentYear || (nextYear === currentYear && nextMonth > currentMonth)) return;
+                  if (calMonth === 11) { setCalMonth(0); setCalYear(y => y + 1); }
+                  else setCalMonth(m => m + 1);
+                }}
+                disabled={calYear > currentYear || (calYear === currentYear && calMonth >= currentMonth)}
+                className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-[var(--bg-surface-alt)] text-[var(--text-primary)] font-bold transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 →
               </button>
@@ -921,7 +985,7 @@ export default function OwnerDashboardPage() {
               ))}
             </div>
 
-            {isLoading ? (
+            {calendarLoading ? (
               <div className="py-16 text-center text-xs text-[var(--text-secondary)]">Memuat kalender...</div>
             ) : (
               <div className="grid grid-cols-7">
@@ -1205,7 +1269,7 @@ export default function OwnerDashboardPage() {
 
             {/* ── Side Panel Drill-down ─────────────────────────────────────── */}
             {selectedAccountDrill && (() => {
-              const empBreakdown = getAccountEmployeeBreakdown(selectedAccountDrill);
+              const { employees: empBreakdown, taskTypes: taskBreakdown } = getAccountEmployeeBreakdown(selectedAccountDrill);
               const totalAccSecs = empBreakdown.reduce((s, e) => s + e.seconds, 0);
               return (
                 <div className="mt-4 bg-[var(--bg-surface)] rounded-2xl border border-[var(--primary)]/30 shadow-md overflow-hidden animate-in slide-in-from-bottom-2 duration-200">
@@ -1221,7 +1285,7 @@ export default function OwnerDashboardPage() {
                         )}
                       </h3>
                       <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-                        Breakdown per karyawan ·{" "}
+                        Breakdown per karyawan & jenis task ·{" "}
                         {accountPeriod === "today" ? "Hari Ini" : accountPeriod === "week" ? "Minggu Ini" : "Bulan Ini"}
                       </p>
                     </div>
@@ -1237,48 +1301,111 @@ export default function OwnerDashboardPage() {
                   {empBreakdown.length === 0 ? (
                     <div className="py-8 text-center text-xs text-[var(--text-secondary)]">Belum ada data pada periode ini.</div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead className="bg-[var(--bg-surface-alt)] border-b border-[var(--border)]">
-                          <tr className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-                            <th className="px-6 py-3">Karyawan</th>
-                            <th className="px-4 py-3">Total Jam</th>
-                            <th className="px-4 py-3">Total Task</th>
-                            <th className="px-4 py-3">% dari Akun</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[var(--border)]">
-                          {empBreakdown.map((emp, idx) => {
-                            const pct = totalAccSecs > 0 ? (emp.seconds / totalAccSecs) * 100 : 0;
-                            return (
-                              <tr key={emp.name + idx} className="hover:bg-[var(--bg-surface-alt)]/50 transition-colors">
-                                <td className="px-6 py-3">
-                                  <div className="flex items-center gap-2">
-                                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                                      idx === 0 ? "bg-[var(--primary-soft)] text-[var(--primary)]" :
-                                      idx === 1 ? "bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]" :
-                                      "bg-[var(--bg-surface-alt)] text-[var(--text-secondary)]"
-                                    }`}>{idx + 1}</span>
-                                    <p className="font-semibold text-[var(--text-primary)]">{emp.name}</p>
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <p className="font-bold text-[var(--primary)]">{formatDecimalHours(emp.seconds / 3600)}</p>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <p className="font-semibold text-[var(--text-primary)]">{emp.taskCount}</p>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <div className="space-y-1">
-                                    <p className="text-xs font-bold">{pct.toFixed(1)}%</p>
-                                    <MiniBar value={emp.seconds} max={empBreakdown[0]?.seconds ?? 1} color="bg-[var(--primary)]" />
-                                  </div>
-                                </td>
+                    <div className="divide-y divide-[var(--border)]">
+
+                      {/* Section 1: Per Karyawan */}
+                      <div>
+                        <div className="px-6 py-2.5 bg-[var(--bg-surface-alt)]">
+                          <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">👤 Breakdown per Karyawan</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-sm">
+                            <thead className="bg-[var(--bg-surface-alt)]/60 border-b border-[var(--border)]">
+                              <tr className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                                <th className="px-6 py-2.5">Karyawan</th>
+                                <th className="px-4 py-2.5">Total Jam</th>
+                                <th className="px-4 py-2.5">Total Task</th>
+                                <th className="px-4 py-2.5">% dari Akun</th>
                               </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                            </thead>
+                            <tbody className="divide-y divide-[var(--border)]">
+                              {empBreakdown.map((emp, idx) => {
+                                const pct = totalAccSecs > 0 ? (emp.seconds / totalAccSecs) * 100 : 0;
+                                return (
+                                  <tr key={emp.name + idx} className="hover:bg-[var(--bg-surface-alt)]/50 transition-colors">
+                                    <td className="px-6 py-3">
+                                      <div className="flex items-center gap-2">
+                                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                          idx === 0 ? "bg-[var(--primary-soft)] text-[var(--primary)]" :
+                                          idx === 1 ? "bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]" :
+                                          "bg-[var(--bg-surface-alt)] text-[var(--text-secondary)]"
+                                        }`}>{idx + 1}</span>
+                                        <p className="font-semibold text-[var(--text-primary)]">{emp.name}</p>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <p className="font-bold text-[var(--primary)]">{formatDecimalHours(emp.seconds / 3600)}</p>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <p className="font-semibold text-[var(--text-primary)]">{emp.taskCount}</p>
+                                      <p className="text-[10px] text-[var(--text-secondary)]">entri</p>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <div className="space-y-1">
+                                        <p className="text-xs font-bold">{pct.toFixed(1)}%</p>
+                                        <MiniBar value={emp.seconds} max={empBreakdown[0]?.seconds ?? 1} color="bg-[var(--primary)]" />
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Section 2: Per Jenis Task (Bug fix baru) */}
+                      {taskBreakdown.length > 0 && (
+                        <div>
+                          <div className="px-6 py-2.5 bg-[var(--bg-surface-alt)]">
+                            <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">📋 Breakdown per Jenis Task</p>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm">
+                              <thead className="bg-[var(--bg-surface-alt)]/60 border-b border-[var(--border)]">
+                                <tr className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                                  <th className="px-6 py-2.5">Jenis Task</th>
+                                  <th className="px-4 py-2.5">Total Jam</th>
+                                  <th className="px-4 py-2.5">Total Entry</th>
+                                  <th className="px-4 py-2.5">% dari Akun</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[var(--border)]">
+                                {taskBreakdown.map((task, idx) => {
+                                  const pct = totalAccSecs > 0 ? (task.seconds / totalAccSecs) * 100 : 0;
+                                  return (
+                                    <tr key={task.name + idx} className="hover:bg-[var(--bg-surface-alt)]/50 transition-colors">
+                                      <td className="px-6 py-3">
+                                        <div className="flex items-center gap-2">
+                                          <span className={`w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-bold ${
+                                            idx === 0 ? "bg-[var(--accent-teal-soft)] text-[var(--accent-teal)]" :
+                                            "bg-[var(--bg-surface-alt)] text-[var(--text-secondary)]"
+                                          }`}>📋</span>
+                                          <p className="font-semibold text-[var(--text-primary)]">{task.name}</p>
+                                        </div>
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <p className="font-bold text-[var(--accent-teal)]">{formatDecimalHours(task.seconds / 3600)}</p>
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <p className="font-semibold text-[var(--text-primary)]">{task.taskCount}</p>
+                                        <p className="text-[10px] text-[var(--text-secondary)]">entri</p>
+                                      </td>
+                                      <td className="px-4 py-3">
+                                        <div className="space-y-1">
+                                          <p className="text-xs font-bold">{pct.toFixed(1)}%</p>
+                                          <MiniBar value={task.seconds} max={taskBreakdown[0]?.seconds ?? 1} color="bg-[var(--accent-teal)]" />
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
                     </div>
                   )}
                 </div>
