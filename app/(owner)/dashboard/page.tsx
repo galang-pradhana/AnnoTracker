@@ -141,6 +141,17 @@ export default function OwnerDashboardPage() {
   const [dateSessions, setDateSessions] = useState<WorkSessionWithEntries[]>([]);
   const [dateLoading, setDateLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"overview" | "calendar" | "employee" | "account" | "language" | "tasktype" | "daily">("overview");
+
+  // Reset account filter ke "month" saat pindah tab
+  const handleSetActiveTab = useCallback((tab: "overview" | "calendar" | "employee" | "account" | "language" | "tasktype" | "daily") => {
+    if (tab !== "account") {
+      setAccountPeriod("month");
+      setAccountDateStart("");
+      setAccountDateEnd("");
+      setCustomRangeSessions([]);
+    }
+    setActiveTab(tab);
+  }, []);
   const [payrollStatusMap, setPayrollStatusMap] = useState<Record<string, "paid" | "unpaid">>({});
 
   // Calendar State inside Dashboard
@@ -152,7 +163,11 @@ export default function OwnerDashboardPage() {
   const [calendarLoading, setCalendarLoading] = useState(false);
 
   // Account tab state — filter periode & side panel drill-down
-  const [accountPeriod, setAccountPeriod] = useState<"today" | "week" | "month">("month");
+  const [accountPeriod, setAccountPeriod] = useState<"today" | "week" | "month" | "custom">("month");
+  const [accountDateStart, setAccountDateStart] = useState<string>("");
+  const [accountDateEnd, setAccountDateEnd] = useState<string>("");
+  const [customRangeSessions, setCustomRangeSessions] = useState<WorkSessionWithEntries[]>([]);
+  const [customRangeLoading, setCustomRangeLoading] = useState(false);
   const [selectedAccountDrill, setSelectedAccountDrill] = useState<AccountStats | null>(null);
 
   // Language tab state — filter periode & side panel drill-down
@@ -229,6 +244,26 @@ export default function OwnerDashboardPage() {
       setIsLoading(false);
     }
   }, [router, currentPayrollPeriod]);
+
+  // ── Fetch custom date range untuk tab akun ───────────────────────────────
+  const fetchCustomRangeData = useCallback(async (start: string, end: string) => {
+    if (!start || !end || start > end) return;
+    setCustomRangeLoading(true);
+    try {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("work_sessions")
+        .select("*, user:users(*), task_entries(*, client_account:client_accounts(*), task_type:task_types(*))")
+        .gte("session_date", start)
+        .lte("session_date", end)
+        .order("session_date", { ascending: false });
+      if (data) setCustomRangeSessions(data as unknown as WorkSessionWithEntries[]);
+    } catch (err) {
+      console.error("Custom range fetch error:", err);
+    } finally {
+      setCustomRangeLoading(false);
+    }
+  }, []);
 
   // ── Bug fix: Fetch kalender per bulan yang dipilih ────────────────────────
   const fetchCalendarData = useCallback(async (year: number, month: number) => {
@@ -339,6 +374,34 @@ export default function OwnerDashboardPage() {
 
   // ── Derived: Filtered Account Stats (berdasarkan accountPeriod) ───────────
   const filteredAccountStats: (AccountStats & { taskCount: number })[] = useMemo(() => {
+    // Mode custom: pakai data dari fetchCustomRangeData
+    if (accountPeriod === "custom") {
+      const accountMap = new Map<string, AccountStats & { taskCount: number }>();
+      customRangeSessions.forEach((s) => {
+        (s.task_entries || []).forEach((e) => {
+          if (!e.client_account) return;
+          const key = e.client_account_id;
+          const existing = accountMap.get(key);
+          if (existing) {
+            existing.totalSeconds += (e.duration_seconds || 0);
+            existing.employeeSet.add(s.user_id);
+            existing.taskCount += 1;
+          } else {
+            accountMap.set(key, {
+              account: e.client_account,
+              totalSeconds: (e.duration_seconds || 0),
+              totalHours: 0,
+              employeeSet: new Set([s.user_id]),
+              taskCount: 1,
+            });
+          }
+        });
+      });
+      return Array.from(accountMap.values())
+        .map((a) => ({ ...a, totalHours: a.totalSeconds / 3600 }))
+        .sort((a, b) => b.totalSeconds - a.totalSeconds);
+    }
+
     const now = new Date();
     const todayISO = getWorkDate(now);
 
@@ -379,23 +442,29 @@ export default function OwnerDashboardPage() {
     return Array.from(accountMap.values())
       .map((a) => ({ ...a, totalHours: a.totalSeconds / 3600 }))
       .sort((a, b) => b.totalSeconds - a.totalSeconds);
-  }, [monthSessions, accountPeriod]);
+  }, [monthSessions, accountPeriod, customRangeSessions]);
 
   // ── Helper: employee + task type breakdown untuk akun tertentu, per filter aktif ──
   const getAccountEmployeeBreakdown = (acc: AccountStats) => {
-    const now = new Date();
-    const todayISO = getWorkDate(now);
-    const dowToday = now.getDay();
-    const diffToMon = dowToday === 0 ? -6 : 1 - dowToday;
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() + diffToMon);
-    const weekStartISO = getWorkDate(weekStart);
+    let filtered: WorkSessionWithEntries[];
 
-    const filtered = monthSessions.filter(s => {
-      if (accountPeriod === "today") return s.session_date === todayISO;
-      if (accountPeriod === "week") return s.session_date >= weekStartISO && s.session_date <= todayISO;
-      return true;
-    });
+    if (accountPeriod === "custom") {
+      filtered = customRangeSessions;
+    } else {
+      const now = new Date();
+      const todayISO = getWorkDate(now);
+      const dowToday = now.getDay();
+      const diffToMon = dowToday === 0 ? -6 : 1 - dowToday;
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() + diffToMon);
+      const weekStartISO = getWorkDate(weekStart);
+
+      filtered = monthSessions.filter(s => {
+        if (accountPeriod === "today") return s.session_date === todayISO;
+        if (accountPeriod === "week") return s.session_date >= weekStartISO && s.session_date <= todayISO;
+        return true;
+      });
+    }
 
     // Aggregasi per karyawan
     const empMap = new Map<string, { name: string; seconds: number; taskCount: number }>();
@@ -437,6 +506,59 @@ export default function OwnerDashboardPage() {
       employees: Array.from(empMap.values()).sort((a, b) => b.seconds - a.seconds),
       taskTypes: Array.from(taskTypeMap.values()).sort((a, b) => b.seconds - a.seconds),
     };
+  };
+
+  // ── Helper: daily breakdown untuk akun tertentu, per filter aktif ─────────
+  const getAccountDailyBreakdown = (acc: AccountStats): {
+    date: string;
+    dayName: string;
+    seconds: number;
+    taskCount: number;
+    employeeSet: Set<string>;
+  }[] => {
+    const HARI = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    let filtered: WorkSessionWithEntries[];
+
+    if (accountPeriod === "custom") {
+      filtered = customRangeSessions;
+    } else {
+      const now = new Date();
+      const todayISO = getWorkDate(now);
+      const dowToday = now.getDay();
+      const diffToMon = dowToday === 0 ? -6 : 1 - dowToday;
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() + diffToMon);
+      const weekStartISO = getWorkDate(weekStart);
+
+      filtered = monthSessions.filter(s => {
+        if (accountPeriod === "today") return s.session_date === todayISO;
+        if (accountPeriod === "week") return s.session_date >= weekStartISO && s.session_date <= todayISO;
+        return true;
+      });
+    }
+
+    const dayMap = new Map<string, { date: string; dayName: string; seconds: number; taskCount: number; employeeSet: Set<string> }>();
+
+    filtered.forEach(s => {
+      (s.task_entries || []).forEach(e => {
+        if (e.client_account_id !== acc.account.id) return;
+        const secs = e.duration_seconds || 0;
+        const dateKey = s.session_date;
+        const dayIndex = new Date(dateKey + "T12:00:00").getDay();
+        const dayName = HARI[dayIndex];
+
+        const existing = dayMap.get(dateKey);
+        if (existing) {
+          existing.seconds += secs;
+          existing.taskCount += 1;
+          existing.employeeSet.add(s.user_id);
+        } else {
+          dayMap.set(dateKey, { date: dateKey, dayName, seconds: secs, taskCount: 1, employeeSet: new Set([s.user_id]) });
+        }
+      });
+    });
+
+    return Array.from(dayMap.values()).sort((a, b) => a.date.localeCompare(b.date));
   };
 
   // ── Derived: Filtered Language Stats (berdasarkan languagePeriod) ─────────
@@ -624,6 +746,7 @@ export default function OwnerDashboardPage() {
     await supabase.auth.signOut();
     router.push(ROUTES.LOGIN);
   };
+
 
   function getDayColor(hours: number): string {
     if (hours === 0) return "";
@@ -1169,38 +1292,104 @@ export default function OwnerDashboardPage() {
           <div className="relative">
             <div className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border)] shadow-xs overflow-hidden">
               {/* Header + Filter Periode */}
-              <div className="px-6 py-4 border-b border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-bold text-[var(--text-primary)]">Total Jam per Akun Klien</h2>
-                  <p className="text-[11px] text-[var(--text-secondary)]">
-                    Klik baris untuk lihat detail per karyawan
-                  </p>
-                </div>
-                {/* Periode toggle */}
-                <div className="flex gap-1 p-1 bg-[var(--bg-surface-alt)] rounded-xl border border-[var(--border)]">
-                  {(["today", "week", "month"] as const).map((p) => (
+              <div className="px-6 py-4 border-b border-[var(--border)] flex flex-col gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-bold text-[var(--text-primary)]">Total Jam per Akun Klien</h2>
+                    <p className="text-[11px] text-[var(--text-secondary)]">
+                      {accountPeriod === "custom" && accountDateStart && accountDateEnd
+                        ? `📅 ${accountDateStart} s/d ${accountDateEnd} · Klik baris untuk detail`
+                        : "Klik baris untuk lihat detail per karyawan"}
+                    </p>
+                  </div>
+                  {/* Periode toggle */}
+                  <div className="flex gap-1 p-1 bg-[var(--bg-surface-alt)] rounded-xl border border-[var(--border)]">
+                    {(["today", "week", "month"] as const).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => {
+                          setAccountPeriod(p);
+                          setAccountDateStart("");
+                          setAccountDateEnd("");
+                          setCustomRangeSessions([]);
+                          setSelectedAccountDrill(null);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          accountPeriod === p
+                            ? "bg-[var(--primary)] text-white shadow-sm"
+                            : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                        }`}
+                      >
+                        {p === "today" ? "Hari Ini" : p === "week" ? "Minggu Ini" : "Bulan Ini"}
+                      </button>
+                    ))}
                     <button
-                      key={p}
-                      onClick={() => setAccountPeriod(p)}
+                      onClick={() => {
+                        setAccountPeriod("custom");
+                        setSelectedAccountDrill(null);
+                      }}
                       className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                        accountPeriod === p
+                        accountPeriod === "custom"
                           ? "bg-[var(--primary)] text-white shadow-sm"
                           : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                       }`}
                     >
-                      {p === "today" ? "Hari Ini" : p === "week" ? "Minggu Ini" : "Bulan Ini"}
+                      📅 Custom
                     </button>
-                  ))}
+                  </div>
                 </div>
+
+                {/* Date Range Picker — muncul saat mode custom */}
+                {accountPeriod === "custom" && (
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 pt-1 pb-0.5 animate-in fade-in duration-150">
+                    <span className="text-[11px] font-bold text-[var(--text-secondary)] shrink-0">Dari:</span>
+                    <input
+                      type="date"
+                      value={accountDateStart}
+                      onChange={(e) => setAccountDateStart(e.target.value)}
+                      className="px-3 py-1.5 text-xs rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] font-medium cursor-pointer"
+                    />
+                    <span className="text-[11px] font-bold text-[var(--text-secondary)] shrink-0">Sampai:</span>
+                    <input
+                      type="date"
+                      value={accountDateEnd}
+                      onChange={(e) => setAccountDateEnd(e.target.value)}
+                      className="px-3 py-1.5 text-xs rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] font-medium cursor-pointer"
+                    />
+                    <button
+                      onClick={() => {
+                        setSelectedAccountDrill(null);
+                        fetchCustomRangeData(accountDateStart, accountDateEnd);
+                      }}
+                      disabled={!accountDateStart || !accountDateEnd || accountDateStart > accountDateEnd || customRangeLoading}
+                      className="px-4 py-1.5 bg-[var(--primary)] text-white text-xs font-bold rounded-xl hover:bg-[var(--primary-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shrink-0"
+                    >
+                      {customRangeLoading ? "Memuat..." : "Terapkan"}
+                    </button>
+                    {accountDateStart && accountDateEnd && accountDateStart <= accountDateEnd && (
+                      <span className="text-[11px] text-[var(--text-secondary)] font-medium">
+                        {Math.round((new Date(accountDateEnd).getTime() - new Date(accountDateStart).getTime()) / (1000 * 60 * 60 * 24) + 1)} hari
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {isLoading ? (
-                <div className="py-12 text-center text-xs text-[var(--text-secondary)]">Memuat data...</div>
+              {isLoading || customRangeLoading ? (
+                <div className="py-12 text-center text-xs text-[var(--text-secondary)]">
+                  {customRangeLoading ? "Mengambil data rentang tanggal..." : "Memuat data..."}
+                </div>
+              ) : accountPeriod === "custom" && !accountDateStart ? (
+                <div className="py-12 text-center">
+                  <p className="text-2xl mb-2">📅</p>
+                  <p className="text-xs font-bold text-[var(--text-primary)]">Pilih Rentang Tanggal</p>
+                  <p className="text-[11px] text-[var(--text-secondary)] mt-1">Isi tanggal dari & sampai, lalu klik <strong>Terapkan</strong></p>
+                </div>
               ) : filteredAccountStats.length === 0 ? (
                 <EmptyState
                   icon="🏢"
-                  title="Belum Ada Akun Klien"
-                  description={`Belum ada pengerjaan task untuk akun klien ${accountPeriod === "today" ? "hari ini" : accountPeriod === "week" ? "minggu ini" : "bulan ini"}.`}
+                  title="Belum Ada Data"
+                  description={accountPeriod === "custom" ? `Tidak ada data pada ${accountDateStart} s/d ${accountDateEnd}.` : `Belum ada pengerjaan task untuk akun klien ${accountPeriod === "today" ? "hari ini" : accountPeriod === "week" ? "minggu ini" : "bulan ini"}.`}
                 />
               ) : (
                 <div className="overflow-x-auto">
@@ -1286,7 +1475,7 @@ export default function OwnerDashboardPage() {
                       </h3>
                       <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
                         Breakdown per karyawan & jenis task ·{" "}
-                        {accountPeriod === "today" ? "Hari Ini" : accountPeriod === "week" ? "Minggu Ini" : "Bulan Ini"}
+                        {accountPeriod === "today" ? "Hari Ini" : accountPeriod === "week" ? "Minggu Ini" : accountPeriod === "custom" ? `${accountDateStart} s/d ${accountDateEnd}` : "Bulan Ini"}
                       </p>
                     </div>
                     <button
@@ -1405,6 +1594,94 @@ export default function OwnerDashboardPage() {
                           </div>
                         </div>
                       )}
+
+                      {/* Section 3: Per Hari */}
+                      {(() => {
+                        const dailyBreakdown = getAccountDailyBreakdown(selectedAccountDrill);
+                        const maxDaySecs = dailyBreakdown[0] ? Math.max(...dailyBreakdown.map(d => d.seconds)) : 1;
+                        const totalDaySecs = dailyBreakdown.reduce((s, d) => s + d.seconds, 0);
+                        if (dailyBreakdown.length === 0) return null;
+                        return (
+                          <div>
+                            <div className="px-6 py-2.5 bg-[var(--bg-surface-alt)] flex items-center justify-between">
+                              <p className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">📆 Breakdown per Hari</p>
+                              <span className="text-[10px] text-[var(--text-secondary)] font-medium">{dailyBreakdown.length} hari aktif</span>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-sm">
+                                <thead className="bg-[var(--bg-surface-alt)]/60 border-b border-[var(--border)]">
+                                  <tr className="text-[10px] font-bold text-[var(--text-secondary)] uppercase tracking-wider">
+                                    <th className="px-6 py-2.5">Tanggal</th>
+                                    <th className="px-4 py-2.5">Hari</th>
+                                    <th className="px-4 py-2.5">Total Jam</th>
+                                    <th className="px-4 py-2.5">Task</th>
+                                    <th className="px-4 py-2.5">Karyawan</th>
+                                    <th className="px-4 py-2.5 min-w-[120px]">Proporsi</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-[var(--border)]">
+                                  {dailyBreakdown.map((day) => {
+                                    const pct = totalDaySecs > 0 ? (day.seconds / totalDaySecs) * 100 : 0;
+                                    const isWeekend = day.dayName === "Sabtu" || day.dayName === "Minggu";
+                                    return (
+                                      <tr key={day.date} className="hover:bg-[var(--bg-surface-alt)]/50 transition-colors">
+                                        <td className="px-6 py-3">
+                                          <p className={`font-bold text-xs ${ isWeekend ? "text-amber-500" : "text-[var(--text-primary)]" }`}>
+                                            {day.date}
+                                          </p>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                            isWeekend
+                                              ? "bg-amber-500/10 text-amber-600 border border-amber-500/30"
+                                              : "bg-[var(--bg-surface-alt)] text-[var(--text-secondary)] border border-[var(--border)]"
+                                          }`}>
+                                            {day.dayName}
+                                          </span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <p className="font-bold text-[var(--accent-teal)]">{formatDecimalHours(day.seconds / 3600)}</p>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <p className="font-semibold text-[var(--text-primary)]">{day.taskCount}</p>
+                                          <p className="text-[10px] text-[var(--text-secondary)]">entri</p>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <p className="font-semibold text-[var(--text-primary)]">{day.employeeSet.size}</p>
+                                          <p className="text-[10px] text-[var(--text-secondary)]">orang</p>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <div className="space-y-1">
+                                            <p className="text-xs font-bold text-[var(--text-primary)]">{pct.toFixed(1)}%</p>
+                                            <MiniBar value={day.seconds} max={maxDaySecs} color="bg-[var(--accent-teal)]" />
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                                {/* Footer: total row */}
+                                <tfoot className="border-t-2 border-[var(--border)] bg-[var(--bg-surface-alt)]/40">
+                                  <tr>
+                                    <td colSpan={2} className="px-6 py-2.5">
+                                      <p className="text-[11px] font-extrabold text-[var(--text-primary)] uppercase tracking-wide">Total</p>
+                                    </td>
+                                    <td className="px-4 py-2.5">
+                                      <p className="font-extrabold text-[var(--accent-teal)] text-[13px]">{formatDecimalHours(totalDaySecs / 3600)}</p>
+                                    </td>
+                                    <td className="px-4 py-2.5">
+                                      <p className="font-bold text-[var(--text-primary)] text-xs">{dailyBreakdown.reduce((s, d) => s + d.taskCount, 0)} entri</p>
+                                    </td>
+                                    <td colSpan={2} className="px-4 py-2.5">
+                                      <p className="text-[11px] text-[var(--text-secondary)]">{dailyBreakdown.length} hari kerja aktif</p>
+                                    </td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                     </div>
                   )}

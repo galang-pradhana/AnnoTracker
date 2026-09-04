@@ -52,12 +52,12 @@ function createCompressor(ctx: AudioContext): DynamicsCompressorNode {
   return comp;
 }
 
-function playAlarmChimeSequence(tone: AlarmSoundTone = "tone1"): () => void {
+// ── FIX: Terima AudioContext yang sudah ada (singleton) agar tidak buat baru tiap siklus
+function playAlarmChimeSequence(
+  tone: AlarmSoundTone = "tone1",
+  ctx: AudioContext
+): () => void {
   try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return () => {};
-
-    const ctx = new AudioCtx();
     let isStopped = false;
     let timeoutId: NodeJS.Timeout | null = null;
     const output = createCompressor(ctx);
@@ -67,7 +67,6 @@ function playAlarmChimeSequence(tone: AlarmSoundTone = "tone1"): () => void {
 
       if (tone === "tone2") {
         // TONE 2: Alarm Clock Digital — burst 4 beep cepat (1400Hz square wave)
-        // Mirip alarm jam digital yang agresif
         const beepCount = 4;
         const beepDur = 0.08;
         const beepGap = 0.12;
@@ -84,12 +83,10 @@ function playAlarmChimeSequence(tone: AlarmSoundTone = "tone1"): () => void {
           osc.start(t);
           osc.stop(t + beepDur);
         }
-        // Jeda antar burst: 4 × (0.08+0.12) = 0.8 detik + gap
         timeoutId = setTimeout(() => { if (!isStopped) playPulse(); }, 1100);
 
       } else if (tone === "tone3") {
-        // TONE 3: Sirine 2-Nada — 880Hz ↔ 660Hz bergantian (seperti klakson/ambulan)
-        // Nada tinggi
+        // TONE 3: Sirine 2-Nada — 880Hz ↔ 660Hz bergantian
         const osc1 = ctx.createOscillator();
         const gain1 = ctx.createGain();
         osc1.type = "sawtooth";
@@ -103,7 +100,6 @@ function playAlarmChimeSequence(tone: AlarmSoundTone = "tone1"): () => void {
         osc1.start(ctx.currentTime);
         osc1.stop(ctx.currentTime + 0.27);
 
-        // Nada rendah
         const osc2 = ctx.createOscillator();
         const gain2 = ctx.createGain();
         osc2.type = "sawtooth";
@@ -120,19 +116,17 @@ function playAlarmChimeSequence(tone: AlarmSoundTone = "tone1"): () => void {
         timeoutId = setTimeout(() => { if (!isStopped) playPulse(); }, 700);
 
       } else {
-        // TONE 1: Urgent Ascending Chime — 3 nada naik cepat (C6→E6→G6) makin keras
-        // Seperti notif urgent / alarm handphone premium
+        // TONE 1: Urgent Ascending Chime — 3 nada naik cepat (C6→E6→G6)
         const notes = [
           { freq: 1046.5, t: 0,    dur: 0.18, gain: 0.55 }, // C6
           { freq: 1318.5, t: 0.15, dur: 0.18, gain: 0.65 }, // E6
-          { freq: 1568.0, t: 0.28, dur: 0.28, gain: 0.75 }, // G6 (paling keras & panjang)
+          { freq: 1568.0, t: 0.28, dur: 0.28, gain: 0.75 }, // G6
         ];
         notes.forEach(({ freq, t, dur, gain: gainVal }) => {
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.type = "sine";
           osc.frequency.setValueAtTime(freq, ctx.currentTime + t);
-          // Sedikit vibrato pada G6 agar terasa lebih urgent
           if (freq === 1568.0) {
             osc.frequency.linearRampToValueAtTime(freq * 1.02, ctx.currentTime + t + 0.1);
             osc.frequency.linearRampToValueAtTime(freq, ctx.currentTime + t + 0.2);
@@ -155,7 +149,7 @@ function playAlarmChimeSequence(tone: AlarmSoundTone = "tone1"): () => void {
     return () => {
       isStopped = true;
       if (timeoutId) clearTimeout(timeoutId);
-      ctx.close().catch(() => {});
+      // Kompressor tidak perlu di-disconnect — ctx dipertahankan sebagai singleton
     };
   } catch {
     return () => {};
@@ -181,6 +175,42 @@ export function TaskAlarmCard({
   // Sumber kebenaran waktu — disimpan di ref agar tidak trigger re-render
   const endTimestampRef = useRef<number | null>(null);
 
+  // ── FIX: Singleton AudioContext — tidak dibuat baru setiap siklus alarm ────
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // ── FIX: Ref untuk isMuted & soundTone agar triggerAlarmRing tidak perlu
+  //         masuk dependency useEffect (mencegah re-run effect restore state)
+  const isMutedRef = useRef<boolean>(isMuted);
+  const soundToneRef = useRef<AlarmSoundTone>(soundTone);
+
+  // Sync refs ke state terbaru
+  useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
+  useEffect(() => { soundToneRef.current = soundTone; }, [soundTone]);
+
+  // ── FIX: Dapatkan atau buat AudioContext singleton (+ resume jika suspended) ──
+  const getOrResumeAudioCtx = useCallback(async (): Promise<AudioContext | null> => {
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return null;
+
+      // Buat hanya sekali; reuse jika sudah ada dan belum closed
+      if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+        audioCtxRef.current = new AudioCtx();
+      }
+
+      // Resume jika suspended (browser autoplay policy block)
+      if (audioCtxRef.current.state === "suspended") {
+        await audioCtxRef.current.resume();
+      }
+
+      return audioCtxRef.current;
+    } catch {
+      return null;
+    }
+  }, []);
+
   // Stop active sound safely
   const stopAlarmSound = useCallback(() => {
     if (stopSoundRef.current) {
@@ -189,16 +219,22 @@ export function TaskAlarmCard({
     }
   }, []);
 
-  // Trigger sound when alarm rings
+  // ── FIX: triggerAlarmRing memakai ref — tidak re-create setiap render ──────
   const triggerAlarmRing = useCallback(() => {
     setIsAlarmActive(true);
     setIsRunning(false);
     setRemainingSeconds(0);
-    if (!isMuted) {
+    if (!isMutedRef.current) {
       stopAlarmSound();
-      stopSoundRef.current = playAlarmChimeSequence(soundTone);
+      // Async: resume ctx dulu baru play suara
+      getOrResumeAudioCtx().then((ctx) => {
+        if (ctx) {
+          stopSoundRef.current = playAlarmChimeSequence(soundToneRef.current, ctx);
+        }
+      });
     }
-  }, [isMuted, soundTone, stopAlarmSound]);
+  }, [stopAlarmSound, getOrResumeAudioCtx]);
+  // Tidak perlu isMuted/soundTone sebagai dependency — dibaca dari ref
 
   // Restore state from localStorage
   useEffect(() => {
@@ -217,9 +253,9 @@ export function TaskAlarmCard({
             const now = Date.now();
             const left = Math.round((parsed.endTimestamp - now) / 1000);
             if (left <= 0) {
+              // ── FIX: panggil via ref agar tidak jadi dependency
               triggerAlarmRing();
             } else {
-              // Restore endTimestampRef agar timer langsung akurat saat resume
               endTimestampRef.current = parsed.endTimestamp;
               setRemainingSeconds(left);
               setIsRunning(true);
@@ -233,7 +269,8 @@ export function TaskAlarmCard({
     } catch (e) {
       console.error("Error restoring task alarm state:", e);
     }
-  }, [triggerAlarmRing]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // ── FIX: dependency array kosong — hanya dijalankan sekali saat mount
 
   // Save state to localStorage
   const saveState = useCallback(
@@ -269,7 +306,6 @@ export function TaskAlarmCard({
   // Timer Countdown Logic — TIMESTAMP-BASED (akurat, tidak drift)
   useEffect(() => {
     if (isRunning) {
-      // Jika endTimestampRef belum di-set (misal start baru), set sekarang
       if (!endTimestampRef.current) {
         endTimestampRef.current = Date.now() + remainingSeconds * 1000;
       }
@@ -278,7 +314,6 @@ export function TaskAlarmCard({
         const endTs = endTimestampRef.current;
         if (!endTs) return;
 
-        // Hitung sisa waktu dari endTimestamp — BUKAN dari prev - 1
         const left = Math.round((endTs - Date.now()) / 1000);
 
         if (left <= 0) {
@@ -289,11 +324,10 @@ export function TaskAlarmCard({
           setRemainingSeconds(left);
           saveState(targetSeconds, left, true, endTs, isMuted, alarmMode);
         }
-      }, 500); // Tick setiap 500ms agar display lebih responsif dan lebih akurat
+      }, 500);
     } else {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
-      // Jangan reset endTimestampRef di sini — dibutuhkan saat resume dari pause
     }
 
     return () => {
@@ -304,10 +338,9 @@ export function TaskAlarmCard({
 
   // Auto-Start Handler on Paste Task Info
   const handleAutoStartAlarm = useCallback(() => {
-    if (alarmMode !== "auto") return; // Ignore if in manual mode
+    if (alarmMode !== "auto") return;
     stopAlarmSound();
     setIsAlarmActive(false);
-    // Set endTimestampRef sebagai sumber kebenaran waktu
     const endTs = Date.now() + targetSeconds * 1000;
     endTimestampRef.current = endTs;
     setRemainingSeconds(targetSeconds);
@@ -335,7 +368,6 @@ export function TaskAlarmCard({
     stopAlarmSound();
     setIsAlarmActive(false);
     const startingSecs = remainingSeconds > 0 ? remainingSeconds : targetSeconds;
-    // Set endTimestampRef sebagai sumber kebenaran waktu
     const endTs = Date.now() + startingSecs * 1000;
     endTimestampRef.current = endTs;
     setRemainingSeconds(startingSecs);
@@ -345,7 +377,6 @@ export function TaskAlarmCard({
 
   const handlePause = () => {
     setIsRunning(false);
-    // Simpan remainingSeconds saat pause, reset endTimestampRef
     endTimestampRef.current = null;
     saveState(targetSeconds, remainingSeconds, false, null, isMuted);
   };
@@ -389,12 +420,13 @@ export function TaskAlarmCard({
     }
   };
 
-  const handleTestSound = () => {
+  // ── FIX: handleTestSound pakai singleton AudioContext ─────────────────────
+  const handleTestSound = async () => {
     stopAlarmSound();
-    const stopFn = playAlarmChimeSequence(soundTone);
-    setTimeout(() => {
-      stopFn();
-    }, 2000);
+    const ctx = await getOrResumeAudioCtx();
+    if (!ctx) return;
+    const stopFn = playAlarmChimeSequence(soundTone, ctx);
+    setTimeout(() => { stopFn(); }, 2000);
   };
 
   // Calculate elapsed progress percentage
